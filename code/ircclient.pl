@@ -42,20 +42,36 @@ close $fh;
 
 my $irc = Mojo::IRC->new(nick => $settings->{nick}, user => $settings->{user}, name => $settings->{name},  server => $settings->{server}) or die "Can't create IRC object";
 
-my $foo = $irc->connect( sub {
+$irc = $irc->connect( sub {
 	my ($irc, $message) = @_;
 	unless($message eq "") {
 		print STDERR "ERROR: Connection as '$settings->{nick}' to '$settings->{server}' : $message\n";
 		exit 1;
 	}
-	verbose(2, "Connected");
-#begin TODO 1
-	verbose(3, "Sleeping 60 seconds");
-	sleep 60;
-	verbose(3, "Done sleeping");
-	$irc->disconnect;
-	verbose(2, "Disconnected");
-#end TODO 1
+	verbose(3, "Connecting...");
+} );
+
+
+$irc->on( close => sub {
+	print STDERR "ERROR: Connection to '$settings->{server}' is lost\n";
+} );
+
+$irc->on( error => sub {
+	my ($irc, $error) = @_;
+	print STDERR "ERROR: (Streamerror) '$error'\n";
+} );
+
+$irc->on( irc_privmsg => sub {
+	my ($irc, $msghash) = @_;
+	my ($fromnick, $message) = @{$msghash->{params}};
+	if($fromnick =~ /$irc->{nick}/ and $message =~ /VERSION/) {	#TODO Check why it fails without regexps
+		verbose(2, "Connected");
+		return;
+	} elsif($message eq "disconnect") {
+		$irc->disconnect( sub { verbose(2, "Disconnected"); } );
+	} else {	#TODO
+		print Dumper($msghash);
+	}
 } );
 
 Mojo::IOLoop->start;
