@@ -16,9 +16,9 @@
 
 #When not in dev move lines around and combine more
 FROM perl:5.32.1-buster
-RUN useradd --create-home --home-dir /home/user user && mkdir /home/user/tmp && chown -R user:user /home/user
 RUN cpanm install Mojo::IRC
 RUN rm -r /root/.cpanm
+RUN useradd --create-home --home-dir /home/user user && mkdir /home/user/readwritedata && mkdir /home/user/readonlydata && chown -R user:user /home/user
 ADD ircclient.pl /usr/local/bin
 WORKDIR /home/user
 #Uncomment this when not in dev: USER user

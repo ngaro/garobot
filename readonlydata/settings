@@ -1,0 +1,6 @@
+#Commented outlines are being ignored
+#Everything until the 1st tab is what is being set
+#Everything behind it, without the newline is the value
+nick	garobot
+user	Garobot
+server	niven.freenode.net

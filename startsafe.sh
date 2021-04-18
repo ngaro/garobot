@@ -16,4 +16,4 @@
 #You should have received a copy of the GNU General Public License
 #along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-docker run --pids-limit 200 --memory 100m --cpus 0.2 --read-only --tmpfs /root/work:rw,exec,size=100m -it --rm --name garobot garobot /bin/bash
+docker run --pids-limit 200 --memory 100m --cpus 0.2 --read-only --tmpfs /home/user/readwritedata:rw,exec,size=100m -v $PWD/readonlydata:/home/user/readonlydata:ro -it --rm --name garobot garobot /bin/bash
