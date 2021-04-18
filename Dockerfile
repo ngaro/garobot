@@ -19,6 +19,6 @@ FROM perl:5.32.1-buster
 RUN cpanm install Mojo::IRC
 RUN rm -r /root/.cpanm
 RUN useradd --create-home --home-dir /home/user user && mkdir /home/user/readwritedata && mkdir /home/user/readonlydata && chown -R user:user /home/user
-ADD ircclient.pl /usr/local/bin
+ADD code/ircclient.pl /usr/local/bin
 WORKDIR /home/user
 #Uncomment this when not in dev: USER user
