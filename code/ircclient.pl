@@ -21,11 +21,16 @@ use strict;
 use warnings;
 
 my $settingsfile = "/home/user/readonlydata/settings";
+my $settings={ verbose => 2 };
 
 use Mojo::IRC;
 use Data::Dumper;	#TODO remove
 
-my $settings={};
+sub verbose {
+	my ($verbose, $message) = @_;
+	say $message if($settings->{verbose} >= $verbose);
+}
+
 open(my $fh, $settingsfile) or die "Can't open settings";
 while(<$fh>) {
 	unless(/^\s*#/) {
@@ -35,5 +40,22 @@ while(<$fh>) {
 }
 close $fh;
 
-my $irc = Mojo::IRC->new(nick => $settings->{nick}, user => $settings->{user}, server => $settings->{server}) or die "Can't create IRC object";
-print Dumper($irc);	#TODO remove
+my $irc = Mojo::IRC->new(nick => $settings->{nick}, user => $settings->{user}, name => $settings->{name},  server => $settings->{server}) or die "Can't create IRC object";
+
+my $foo = $irc->connect( sub {
+	my ($irc, $message) = @_;
+	unless($message eq "") {
+		print STDERR "ERROR: Connection as '$settings->{nick}' to '$settings->{server}' : $message\n";
+		exit 1;
+	}
+	verbose(2, "Connected");
+#begin TODO 1
+	verbose(3, "Sleeping 60 seconds");
+	sleep 60;
+	verbose(3, "Done sleeping");
+	$irc->disconnect;
+	verbose(2, "Disconnected");
+#end TODO 1
+} );
+
+Mojo::IOLoop->start;
