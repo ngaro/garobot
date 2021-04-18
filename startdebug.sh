@@ -16,5 +16,6 @@
 #You should have received a copy of the GNU General Public License
 #along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+echo "You probably want to change readonlydata/settings"
 echo "Run with /usr/local/bin/code/ircclient.pl"
 docker run --read-only --tmpfs /home/user/readwritedata:rw,exec,size=100m -v $PWD/readonlydata:/home/user/readonlydata:ro -v $PWD/code:/usr/local/bin/code -it --rm --name garobot garobot /bin/bash
