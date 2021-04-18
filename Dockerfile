@@ -17,4 +17,5 @@
 FROM perl:5.32.1-buster
 RUN useradd --create-home --home-dir /home/user user && mkdir /home/user/tmp && chown -R user:user /home/user
 WORKDIR /home/user
-USER user
+ADD ircclient.pl /usr/local/bin
+#Uncomment this when not in dev: USER user
