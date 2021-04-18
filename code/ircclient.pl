@@ -23,13 +23,17 @@ use warnings;
 my $settingsfile = "/home/user/readonlydata/settings";
 
 use Mojo::IRC;
+use Data::Dumper;	#TODO remove
 
-open(my $fh, $settingsfile);
+my $settings={};
+open(my $fh, $settingsfile) or die "Can't open settings";
 while(<$fh>) {
 	unless(/^\s*#/) {
-		print $_;
+		/^(.*?)\t(.*)\n/;
+		$settings->{$1} = $2;
 	}
 }
 close $fh;
 
-#my $irc = Mojo::IRC->new(nick => 'garobot', user => 'Garobot', server => 
+my $irc = Mojo::IRC->new(nick => $settings->{nick}, user => $settings->{user}, server => $settings->{server}) or die "Can't create IRC object";
+print Dumper($irc);	#TODO remove
