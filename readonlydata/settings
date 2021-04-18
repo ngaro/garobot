@@ -3,4 +3,5 @@
 #Everything behind it, without the newline is the value
 nick	garobot
 user	Garobot
+name	garobot
 server	niven.freenode.net
