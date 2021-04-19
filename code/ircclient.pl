@@ -23,7 +23,9 @@ use Mojo::IRC;
 use Data::Dumper;	#TODO remove
 
 #default settings
-my $settingsfile = "/home/user/readonlydata/settings";
+my $rodir= "/home/user/readonlydata";
+my $rwdir= "/home/user/readwritedata";
+my $settingsfile = "settings";
 my $settings={ verbose => 4 };	#TODO lower
 
 #prints $message to STDOUT unless $verbose is higher then the allowed setting
@@ -42,9 +44,9 @@ sub verb4hex {
 	}
 }
 
-#Read the settings
+#Read the settings from the read/writedir
 sub readsettings {
-	open(my $fh, $settingsfile) or die "Can't open settings";
+	open(my $fh, "$rwdir/$settingsfile") or die "Can't open settings";
 	while(<$fh>) {
 		unless(/^\s*#/) {
 			/^(.*?)\t(.*)\n/;
