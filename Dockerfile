@@ -14,11 +14,9 @@
 #You should have received a copy of the GNU General Public License
 #along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-#When not in dev move lines around and combine more
 FROM perl:5.32.1-buster
-RUN cpanm install Mojo::IRC
-RUN rm -r /root/.cpanm
+RUN cpanm install Mojo::IRC && rm -r /root/.cpanm
 RUN useradd --create-home --home-dir /home/user user && mkdir /home/user/readwritedata && mkdir /home/user/readonlydata && chown -R user:user /home/user
 ADD code/ircclient.pl /usr/local/bin
 WORKDIR /home/user
-#Uncomment this when not in dev: USER user
+USER user
