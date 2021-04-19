@@ -73,6 +73,12 @@ sub allowedprivmsg {
 	} elsif($message =~ /^\s*!?\s*join\s+(#\S+)\s*$/i) {
 		my $channel = $1;
 		$irc->write("JOIN $channel", sub { verbose(2, "Joined '$channel'"); } );
+	} elsif($message =~ /^\s*!?\s*leave\s+(#\S+)\s*$/i) {
+		my $channel = $1;
+		$irc->write("PART $channel", sub { verbose(2, "Left '$channel'"); } );
+	} elsif($message =~ /^\s*!?\s*nick\s+(\S+)\s*$/i) {
+		my $nick = $1;
+		$irc->write("NICK $nick", sub { verbose(2, "Changed nick to '$nick'"); } );
 	} else {
 		$irc->write("PRIVMSG $from :I am not doing anything with this action.");
 	}
