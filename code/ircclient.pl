@@ -76,7 +76,9 @@ sub notallowedprivmsg {
 }
 
 #Create the bot
+system("cp $rodir/$settingsfile $rwdir");
 readsettings;
+verbose(3, Dumper($settings));
 my $irc = Mojo::IRC->new(nick => $settings->{nick}, user => $settings->{user}, name => $settings->{name},  server => $settings->{server}) or die "Can't create IRC object";
 $irc->parser(Parse::IRC->new(ctcp => 1));
 
