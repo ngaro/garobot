@@ -63,6 +63,18 @@ sub readsettings {
 	close $fh;
 }
 
+#Handle private message with rights
+sub allowedprivmsg {
+	my ($irc, $from, $message) = @_;
+	$irc->write("PRIVMSG $from :I am not doing anything with this action.");
+}
+
+#Handle private message from users withOUT rights
+sub notallowedprivmsg {
+	my ($irc, $from, $message) = @_;
+	$irc->write("PRIVMSG $from :Sorry $from, but I don't trust you (yet) to do anything interesting with this message.");
+}
+
 #Create the bot
 readsettings;
 my $irc = Mojo::IRC->new(nick => $settings->{nick}, user => $settings->{user}, name => $settings->{name},  server => $settings->{server}) or die "Can't create IRC object";
@@ -94,11 +106,8 @@ $irc->on( irc_privmsg => sub {
 	verbose(3, "From: '$from'");
 	verbose(3, "Message: '$message'");
 	verb4hex($message);
-	if($message =~ /^\s*disconnect\s*$/i) {
-		$irc->disconnect( sub { verbose(2, "Disconnected"); } );
-	} else {
-		say "TODO handle '$message' from '$from'";
-	}
+	if(defined $settings->{allowedusers}->{$from}) { allowedprivmsg($irc, $from, $message); return; }
+	else { notallowedprivmsg($irc, $from, $message); }
 } );
 
 $irc->on( ctcp_version => sub {
