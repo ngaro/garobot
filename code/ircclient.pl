@@ -31,6 +31,14 @@ sub verbose {
 	say $message if($settings->{verbose} >= $verbose);
 }
 
+sub verb4hex {
+	my $message = shift;
+	if($settings->{verbose} > 3) {
+		$message =~ s/(.)/sprintf("%x-",ord($1))/eg; chop $message;
+		verbose(4, $message);
+	}
+}
+
 open(my $fh, $settingsfile) or die "Can't open settings";
 while(<$fh>) {
 	unless(/^\s*#/) {
@@ -41,6 +49,7 @@ while(<$fh>) {
 close $fh;
 
 my $irc = Mojo::IRC->new(nick => $settings->{nick}, user => $settings->{user}, name => $settings->{name},  server => $settings->{server}) or die "Can't create IRC object";
+$irc->parser(Parse::IRC->new(ctcp => 1));
 
 $irc = $irc->connect( sub {
 	my ($irc, $message) = @_;
@@ -65,14 +74,17 @@ $irc->on( irc_privmsg => sub {
 	my ($irc, $msghash) = @_;
 	my $message = @{$msghash->{params}}[1];
 	my $from = IRC::Utils::parse_user($msghash->{prefix});
-	if($from eq "freenode-connect" and $message =~ /^\x01VERSION\x01$/) {
-		verbose(2, "Connected");
-		return;
-	} elsif($message =~ /^\s*disconnect\s*$/i) {
+	verb4hex($message);
+	if($message =~ /^\s*disconnect\s*$/i) {
 		$irc->disconnect( sub { verbose(2, "Disconnected"); } );
 	} else {	#TODO
 		print Dumper($msghash);
 	}
 } );
+
+$irc->on( ctcp_version => sub {
+	verbose(2, "Connected");
+} );
+
 
 Mojo::IOLoop->start;
