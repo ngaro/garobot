@@ -5,3 +5,5 @@ nick	garobot
 user	Garobot
 name	garobot
 server	niven.freenode.net
+#seperate nicknames allowed to command garobot by spaces
+allowedusers	garo

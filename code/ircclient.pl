@@ -53,6 +53,13 @@ sub readsettings {
 			$settings->{$1} = $2;
 		}
 	}
+	if(defined $settings->{allowedusers}) {
+		my @allowedusers = split(/\s+/, $settings->{allowedusers});
+		$settings->{allowedusers}={};
+		foreach(@allowedusers) {
+			$settings->{allowedusers}->{$_}=1;
+		}
+	}
 	close $fh;
 }
 
