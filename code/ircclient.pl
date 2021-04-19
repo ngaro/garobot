@@ -87,7 +87,7 @@ sub allowedprivmsg {
 #Handle private message from users withOUT rights
 sub notallowedprivmsg {
 	my ($irc, $from, $message) = @_;
-	$irc->write("PRIVMSG $from :Sorry $from, but I don't trust you (yet) to do anything interesting with this message.");
+	$irc->write("PRIVMSG $from :Sorry $from, either this isn't a command or you are not allowed to use it. Try '!help'");
 }
 
 #Create the bot
@@ -123,7 +123,21 @@ $irc->on( irc_privmsg => sub {
 	verbose(3, "From: '$from'");
 	verbose(3, "Message: '$message'");
 	verb4hex($message);
-	if(defined $settings->{allowedusers}->{$from}) { allowedprivmsg($irc, $from, $message); return; }
+	#Handle messages that do the same thing for everyone
+	if($message =~ /^\s*!?\s*help\s*$/i) {
+		my $help=<<EINDE;
+Commands for private messages. Not everyone is allowed to use them all.
+disconnect     -> Disconnects this bot from the server
+help           -> Show this
+join #channel  -> Joins #channel (without leaving others)
+leave #channel -> Leave #channel
+nick newnick   -> Changes nick to newnick
+EINDE
+		foreach(split /\n/, $help) { $irc->write("PRIVMSG $from :$_"); }
+		verbose(3,$help);
+	}
+	#Handle messages that do different things for users with different rights
+	elsif(defined $settings->{allowedusers}->{$from}) { allowedprivmsg($irc, $from, $message); }
 	else { notallowedprivmsg($irc, $from, $message); }
 } );
 
