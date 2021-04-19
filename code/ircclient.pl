@@ -19,18 +19,20 @@
 use v5.30;	#TODO change to 5.32
 use strict;
 use warnings;
-
-my $settingsfile = "/home/user/readonlydata/settings";
-my $settings={ verbose => 2 };
-
 use Mojo::IRC;
 use Data::Dumper;	#TODO remove
 
+#default settings
+my $settingsfile = "/home/user/readonlydata/settings";
+my $settings={ verbose => 2 };
+
+#prints $message to STDOUT unless $verbose is higher then the allowed setting
 sub verbose {
 	my ($verbose, $message) = @_;
 	say $message if($settings->{verbose} >= $verbose);
 }
 
+#prints $message as hexadecimal chars to STDOUT if $verbose is higher then 3 (if used to skip unnecessary conversion)
 sub verb4hex {
 	my $message = shift;
 	if($settings->{verbose} > 3) {
@@ -39,6 +41,10 @@ sub verb4hex {
 	}
 }
 
+
+## Begin of main code
+
+#Read the settings
 open(my $fh, $settingsfile) or die "Can't open settings";
 while(<$fh>) {
 	unless(/^\s*#/) {
@@ -48,9 +54,11 @@ while(<$fh>) {
 }
 close $fh;
 
+#Create the bot
 my $irc = Mojo::IRC->new(nick => $settings->{nick}, user => $settings->{user}, name => $settings->{name},  server => $settings->{server}) or die "Can't create IRC object";
 $irc->parser(Parse::IRC->new(ctcp => 1));
 
+#Connect the bot
 $irc = $irc->connect( sub {
 	my ($irc, $message) = @_;
 	unless($message eq "") {
@@ -60,7 +68,7 @@ $irc = $irc->connect( sub {
 	verbose(3, "Connecting...");
 } );
 
-
+#Set all handlers
 $irc->on( close => sub {
 	print STDERR "ERROR: Connection to '$settings->{server}' is lost\n";
 } );
