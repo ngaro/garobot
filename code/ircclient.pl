@@ -66,7 +66,15 @@ sub readsettings {
 #Handle private message with rights
 sub allowedprivmsg {
 	my ($irc, $from, $message) = @_;
-	$irc->write("PRIVMSG $from :I am not doing anything with this action.");
+	if($message =~ /^\s*!?\s*disconnect\s*$/i) {
+		$irc->write("PRIVMSG $from :Disconnecting...");
+		$irc->disconnect( sub { verbose(2, "Disconnected"); } );
+	} elsif($message =~ /^\s*!?\s*join\s+(#\S+)\s*$/i) {
+		my $channel = $1;
+		$irc->write("JOIN $channel", sub { verbose(2, "Joined '$channel'"); } );
+	} else {
+		$irc->write("PRIVMSG $from :I am not doing anything with this action.");
+	}
 }
 
 #Handle private message from users withOUT rights
