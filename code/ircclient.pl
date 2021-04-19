@@ -69,6 +69,7 @@ sub allowedprivmsg {
 	if($message =~ /^\s*!?\s*disconnect\s*$/i) {
 		$irc->write("PRIVMSG $from :Disconnecting...");
 		$irc->disconnect( sub { verbose(2, "Disconnected"); } );
+		exit;
 	} elsif($message =~ /^\s*!?\s*join\s+(#\S+)\s*$/i) {
 		my $channel = $1;
 		$irc->write("JOIN $channel", sub { verbose(2, "Joined '$channel'"); } );
