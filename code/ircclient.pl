@@ -60,7 +60,6 @@ my $irc = Mojo::IRC->new(nick => $settings->{nick}, user => $settings->{user}, n
 $irc->parser(Parse::IRC->new(ctcp => 1));
 
 ##Configure all events and methods
-#Connect the bot
 $irc = $irc->connect( sub {
 	my ($irc, $message) = @_;
 	unless($message eq "") {
@@ -70,7 +69,6 @@ $irc = $irc->connect( sub {
 	verbose(3, "Connecting...");
 } );
 
-#Set all handlers
 $irc->on( close => sub {
 	print STDERR "ERROR: Connection to '$settings->{server}' is lost\n";
 } );
