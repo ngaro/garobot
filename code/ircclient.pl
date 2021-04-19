@@ -63,11 +63,12 @@ $irc->on( error => sub {
 
 $irc->on( irc_privmsg => sub {
 	my ($irc, $msghash) = @_;
-	my ($fromnick, $message) = @{$msghash->{params}};
-	if($fromnick =~ /$irc->{nick}/ and $message =~ /VERSION/) {	#TODO Check why it fails without regexps
+	my $message = @{$msghash->{params}}[1];
+	my $from = IRC::Utils::parse_user($msghash->{prefix});
+	if($from eq "freenode-connect" and $message =~ /^\x01VERSION\x01$/) {
 		verbose(2, "Connected");
 		return;
-	} elsif($message eq "disconnect") {
+	} elsif($message =~ /^\s*disconnect\s*$/i) {
 		$irc->disconnect( sub { verbose(2, "Disconnected"); } );
 	} else {	#TODO
 		print Dumper($msghash);
