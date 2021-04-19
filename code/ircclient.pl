@@ -16,17 +16,17 @@
 #You should have received a copy of the GNU General Public License
 #along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use v5.30;	#TODO change to 5.32
+use v5.32;
 use strict;
 use warnings;
 use Mojo::IRC;
-use Data::Dumper;	#TODO remove
+use Data::Dumper;
 
 #default settings
 my $rodir= "/home/user/readonlydata";
 my $rwdir= "/home/user/readwritedata";
 my $settingsfile = "settings";
-my $settings={ verbose => 4 };	#TODO lower
+my $settings = { verbose => 4 };	#TODO set this lower in master
 
 #prints $message to STDOUT unless $verbose is higher then the allowed setting
 sub verbose {
