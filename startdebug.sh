@@ -16,6 +16,19 @@
 #You should have received a copy of the GNU General Public License
 #along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-echo "You probably want to change readonlydata/settings"
-echo "Run with /usr/local/bin/code/ircclient.pl"
-docker run --read-only --tmpfs /home/user/readwritedata:rw,exec,size=100m -v $PWD/readonlydata:/home/user/readonlydata:ro -v $PWD/code:/usr/local/bin/code -it --rm --name garobot garobot /bin/bash
+screen=byobu-screen #You can use 'screen' itself here
+
+$screen -d -m -S garobot docker run -it --rm --name ngircd linuxserver/ngircd
+sleep 3	#gives server a couple of seconds to start
+$screen -S garobot -X screen docker run -v $PWD/admin.conf:/usr/local/etc/irssi.conf:ro -it --rm --name irssiadmin irssi
+$screen -S garobot -X screen docker run -v $PWD/regular.conf:/usr/local/etc/irssi.conf:ro -it --rm --name irssiregular irssi
+$screen -S garobot -X screen docker run --read-only --tmpfs /home/user/readwritedata:rw,exec,size=100m -v $PWD/readonlydata:/home/user/readonlydata:ro -v $PWD/code:/usr/local/bin/code:ro -it --rm --name garobot garobot /bin/bash
+$screen -S garobot -X screen $PWD/debuginfo.sh
+
+$screen -S garobot -p 0 -X title server
+$screen -S garobot -p 1 -X title admin
+$screen -S garobot -p 2 -X title regular
+$screen -S garobot -p 3 -X title garobot
+$screen -S garobot -p 4 -X title info
+
+$screen -r garobot
