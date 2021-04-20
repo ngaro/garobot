@@ -66,17 +66,33 @@ sub readsettings {
 #Handle private message with rights
 sub allowedprivmsg {
 	my ($irc, $from, $to, $message) = @_;
-	if($message =~ /^\s*!?\s*disconnect\s*$/i) {
+	if($to=~/^#/) { # $from sent to channel
+	} else { # $from sent to me
+		if($message =~ /^\s*!\s*allow\s+(\S+)\s*$/i) {
+			my $nick = $1;
+			$settings->{allowedusers}->{$nick} = 1;
+			$irc->write("PRIVMSG $nick :$from made you a botadmin");
+			verbose(2, "$nick is now an admin");
+			return;
+		} elsif($message =~ /^\s*!?\s*disallow\s+(\S+)\s*$/i) {
+			my $nick = $1;
+			$settings->{allowedusers}->{$nick} = undef;
+			$irc->write("PRIVMSG $nick :You are no longer a botadmin");
+			verbose(2, "$nick is no longer an admin");
+			return;
+		}
+	}
+	if($message =~ /^\s*!\s*disconnect\s*$/i) {
 		$irc->write("PRIVMSG $from :Disconnecting...");
 		$irc->disconnect( sub { verbose(2, "Disconnected"); } );
 		exit;
-	} elsif($message =~ /^\s*!?\s*join\s+(#\S+)\s*$/i) {
+	} elsif($message =~ /^\s*!\s*join\s+(#\S+)\s*$/i) {
 		my $channel = $1;
 		$irc->write("JOIN $channel", sub { verbose(2, "Joined '$channel'"); } );
-	} elsif($message =~ /^\s*!?\s*leave\s+(#\S+)\s*$/i) {
+	} elsif($message =~ /^\s*!\s*leave\s+(#\S+)\s*$/i) {
 		my $channel = $1;
 		$irc->write("PART $channel", sub { verbose(2, "Left '$channel'"); } );
-	} elsif($message =~ /^\s*!?\s*nick\s+(\S+)\s*$/i) {
+	} elsif($message =~ /^\s*!\s*nick\s+(\S+)\s*$/i) {
 		my $nick = $1;
 		$irc->write("NICK $nick", sub { verbose(2, "Changed nick to '$nick'"); } );
 	} else {
@@ -87,6 +103,9 @@ sub allowedprivmsg {
 #Handle private message from users withOUT rights
 sub notallowedprivmsg {
 	my ($irc, $from, $to, $message) = @_;
+	if($to=~/^#/) { # $from sent to channel
+	} else { # $from sent to me
+	}
 	$irc->write("PRIVMSG $from :Sorry $from, either this isn't a command or you are not allowed to use it. Try '!help'");
 }
 
@@ -124,9 +143,13 @@ $irc->on( irc_privmsg => sub {
 	my $to = @{$msghash->{params}}[0];
 	verbose(3, "From '$from' to '$to' this message: '$message'");
 	verb4hex($message);
-	#TODO Treat channels and users differently
 	#Handle messages that do the same thing for everyone
-	if($message =~ /^\s*!?\s*help\s*$/i) {
+	if($to=~/^#/) { # $from sent to channel
+		return unless($message=~/^\s*!\s*/);	#Only reply to !-commands in channels
+	} else { # $from sent to me
+		$message="!$message" unless($message=~/^\s*!/)	#Make sure there is a '!' so we can handle it better
+	}
+	if($message =~ /^\s*!\s*help\s*$/i) {
 		my $help=<<EINDE;
 Some commands are for botadmins only
 Some commands are not allowed in channels
@@ -137,6 +160,8 @@ help           -> Show this
 join #channel  -> Joins #channel (without leaving others)
 leave #channel -> Leave #channel
 nick newnick   -> Changes nick to newnick
+allow nick     -> nick becomes botadmin
+disallow nick  -> nick is no longer botadmin
 EINDE
 		foreach(split /\n/, $help) { $irc->write("PRIVMSG $from :$_"); }
 		verbose(3,$help);
