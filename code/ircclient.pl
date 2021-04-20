@@ -95,6 +95,30 @@ sub allowedprivmsg {
 	} elsif($message =~ /^\s*!\s*nick\s+(\S+)\s*$/i) {
 		my $nick = $1;
 		$irc->write("NICK $nick", sub { verbose(2, "Changed nick to '$nick'"); } );
+	} elsif($message =~ /^\s*!\s*bash\s+(.*)\s*$/i) {
+		my $command = $1;
+		my $replyto = $from; $replyto = $to if($to=~/^#/);
+		my $output = `$command`; chomp $output; my @outputlines = split(/\n/, $output); my $outputlength = @outputlines;
+		if($outputlength <= 3) {
+			foreach(@outputlines) { $irc->write("PRIVMSG $replyto :$_"); }
+		} elsif($outputlength <= 20) {
+			if($replyto=~/^#/) {
+				$irc->write("PRIVMSG $replyto :The result was too large ($outputlength lines). I'm sending it to $from. These are the first 2 lines:");
+				$irc->write("PRIVMSG $replyto :" . $outputlines[0]);
+				$irc->write("PRIVMSG $replyto :" . $outputlines[1]);
+			}
+			foreach(@outputlines) { $irc->write("PRIVMSG $from :$_"); }
+		} else {
+			if($replyto=~/^#/) {
+				$irc->write("PRIVMSG $replyto :The result was WAY too large ($outputlength lines). This are the first 2 and I'll send 20 lines to $from:");
+				$irc->write("PRIVMSG $replyto :" . $outputlines[0]);
+				$irc->write("PRIVMSG $replyto :" . $outputlines[1]);
+			} else {
+				$irc->write("PRIVMSG $from :The result was WAY too large ($outputlength lines). This are the first 20 lines:");
+			}
+			foreach(my $i=0; $i<20; $i++) { $irc->write("PRIVMSG $from :$outputlines[$i]"); }
+		}
+		verbose(2, "Result of '!bash $command':\n$output");
 	} else {
 		$irc->write("PRIVMSG $from :I am not doing anything with this action.");
 	}
@@ -162,6 +186,7 @@ leave #channel -> Leave #channel
 nick newnick   -> Changes nick to newnick
 allow nick     -> nick becomes botadmin
 disallow nick  -> nick is no longer botadmin
+bash command   -> run command in bash
 EINDE
 		foreach(split /\n/, $help) { $irc->write("PRIVMSG $from :$_"); }
 		verbose(3,$help);
