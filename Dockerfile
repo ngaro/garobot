@@ -20,5 +20,6 @@ RUN cpanm install Mojo::IRC
 RUN rm -r /root/.cpanm
 RUN useradd --create-home --home-dir /home/user user && mkdir /home/user/readwritedata && mkdir /home/user/readonlydata && chown -R user:user /home/user
 ADD code/ircclient.pl /usr/local/bin
+RUN cpanm install Capture::SystemIO
 WORKDIR /home/user
 #Uncomment this when not in dev: USER user

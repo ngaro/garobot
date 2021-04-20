@@ -21,6 +21,7 @@ use strict;
 use warnings;
 use Mojo::IRC;
 use Data::Dumper;
+use Capture::SystemIO qw/cs_system/;
 
 #default settings
 my $rodir= "/home/user/readonlydata";
@@ -63,6 +64,51 @@ sub readsettings {
 	close $fh;
 }
 
+#Send replies to commands, but keep the output reasonable
+sub sendreplies {
+	my ($irc, $from, $to, $linesref) = @_;
+	#by default reply to the sender, but if it's send to the channel and has a reasonable size, reply to the channel
+	my $replyto = $from; $replyto = $to if($to=~/^#/);
+	my @lines = @$linesref; my $numlines = @lines;
+	if($numlines <= 3) {	#Max 3 lines: reply to the channel if sent to the channel, reply to sender if it's a private message
+		foreach(@lines) { $irc->write("PRIVMSG $replyto :$_"); }
+	} elsif($numlines <= 20) {	#3-20 lines:
+		if($replyto=~/^#/) {	#send first 2 lines to the channel if it was sent to the channel
+			$irc->write("PRIVMSG $replyto :The result was too large ($numlines lines). I'm sending it to $from. These are the first 2 lines:");
+			$irc->write("PRIVMSG $replyto :" . $lines[0]);
+			$irc->write("PRIVMSG $replyto :" . $lines[1]);
+		}
+		#always send all lines to the sender
+		foreach(@lines) { $irc->write("PRIVMSG $from :$_"); }
+	} else {	# > 20 lines
+		if($replyto=~/^#/) {	#send first 2 lines to the channel if it was sent to the channel
+			$irc->write("PRIVMSG $replyto :The result was WAY too large ($numlines lines). This are the first 2 and I'll send 20 lines to $from:");
+			$irc->write("PRIVMSG $replyto :" . $lines[0]);
+			$irc->write("PRIVMSG $replyto :" . $lines[1]);
+		}
+		#send 20 first lines to sender
+		$irc->write("PRIVMSG $from :The result was WAY too large ($numlines lines). This are the first 20 lines:");
+		foreach(my $i=0; $i<20; $i++) { $irc->write("PRIVMSG $from :$lines[$i]"); }
+	}
+}
+
+#run $command requested by $from to channel $to and sent the output here, our to $from if there is no channel
+#runbash fails if /tmp is not writable (cs_system needs this)
+sub runbash {
+	my ($irc, $from, $to, $command) = @_;
+	my $stderr; my $stdout;
+	eval { ($stdout, $stderr) = cs_system("$command"); };	#normally we ignore stderr
+	if($@) {	#When bash complains we send stderr
+		$stdout = $@->{stderr};
+		$stdout =~ s/\s+at\s+\S+SystemIO.pm\s+line\s+\d+\.\s*\n$//;
+	} else {	#stdout is standard a ref
+		$stdout = $$stdout;
+	}
+	chomp $stdout; my @outputlines = split(/\n/, $stdout);
+	sendreplies($irc, $from, $to, \@outputlines);
+	verbose(2, "Result of '!bash $command':\n$stdout");
+}
+
 #Handle private message with rights
 sub allowedprivmsg {
 	my ($irc, $from, $to, $message) = @_;
@@ -96,29 +142,7 @@ sub allowedprivmsg {
 		my $nick = $1;
 		$irc->write("NICK $nick", sub { verbose(2, "Changed nick to '$nick'"); } );
 	} elsif($message =~ /^\s*!\s*bash\s+(.*)\s*$/i) {
-		my $command = $1;
-		my $replyto = $from; $replyto = $to if($to=~/^#/);
-		my $output = `$command`; chomp $output; my @outputlines = split(/\n/, $output); my $outputlength = @outputlines;
-		if($outputlength <= 3) {
-			foreach(@outputlines) { $irc->write("PRIVMSG $replyto :$_"); }
-		} elsif($outputlength <= 20) {
-			if($replyto=~/^#/) {
-				$irc->write("PRIVMSG $replyto :The result was too large ($outputlength lines). I'm sending it to $from. These are the first 2 lines:");
-				$irc->write("PRIVMSG $replyto :" . $outputlines[0]);
-				$irc->write("PRIVMSG $replyto :" . $outputlines[1]);
-			}
-			foreach(@outputlines) { $irc->write("PRIVMSG $from :$_"); }
-		} else {
-			if($replyto=~/^#/) {
-				$irc->write("PRIVMSG $replyto :The result was WAY too large ($outputlength lines). This are the first 2 and I'll send 20 lines to $from:");
-				$irc->write("PRIVMSG $replyto :" . $outputlines[0]);
-				$irc->write("PRIVMSG $replyto :" . $outputlines[1]);
-			} else {
-				$irc->write("PRIVMSG $from :The result was WAY too large ($outputlength lines). This are the first 20 lines:");
-			}
-			foreach(my $i=0; $i<20; $i++) { $irc->write("PRIVMSG $from :$outputlines[$i]"); }
-		}
-		verbose(2, "Result of '!bash $command':\n$output");
+		runbash($irc, $from, $to, $1);
 	} else {
 		$irc->write("PRIVMSG $from :I am not doing anything with this action.");
 	}
@@ -130,7 +154,7 @@ sub notallowedprivmsg {
 	if($to=~/^#/) { # $from sent to channel
 	} else { # $from sent to me
 	}
-	$irc->write("PRIVMSG $from :Sorry $from, either this isn't a command or you are not allowed to use it. Try '!help'");
+	$irc->write("PRIVMSG $from :Sorry $from, either '$message' isn't a command or you are not allowed to use it. Try '!help'");
 }
 
 #Create the bot
