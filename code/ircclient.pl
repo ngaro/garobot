@@ -26,7 +26,7 @@ use Data::Dumper;
 my $rodir= "/home/user/readonlydata";
 my $rwdir= "/home/user/readwritedata";
 my $settingsfile = "settings";
-my $settings = { verbose => 4 };	#TODO set this lower in master
+my $settings = { verbose => 3 };	#TODO set this lower in master
 
 #prints $message to STDOUT unless $verbose is higher then the allowed setting
 sub verbose {
@@ -118,11 +118,13 @@ $irc->on( error => sub {
 
 $irc->on( irc_privmsg => sub {
 	my ($irc, $msghash) = @_;
+	verbose(4, "Messagehash: ".Dumper($msghash));
 	my $message = @{$msghash->{params}}[1];
 	my $from = IRC::Utils::parse_user($msghash->{prefix});
-	verbose(3, "From: '$from'");
-	verbose(3, "Message: '$message'");
+	my $to = @{$msghash->{params}}[0];
+	verbose(3, "From '$from' to '$to' this message: '$message'");
 	verb4hex($message);
+	#TODO Treat channels and users differently
 	#Handle messages that do the same thing for everyone
 	if($message =~ /^\s*!?\s*help\s*$/i) {
 		my $help=<<EINDE;
