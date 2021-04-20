@@ -65,7 +65,7 @@ sub readsettings {
 
 #Handle private message with rights
 sub allowedprivmsg {
-	my ($irc, $from, $message) = @_;
+	my ($irc, $from, $to, $message) = @_;
 	if($message =~ /^\s*!?\s*disconnect\s*$/i) {
 		$irc->write("PRIVMSG $from :Disconnecting...");
 		$irc->disconnect( sub { verbose(2, "Disconnected"); } );
@@ -86,7 +86,7 @@ sub allowedprivmsg {
 
 #Handle private message from users withOUT rights
 sub notallowedprivmsg {
-	my ($irc, $from, $message) = @_;
+	my ($irc, $from, $to, $message) = @_;
 	$irc->write("PRIVMSG $from :Sorry $from, either this isn't a command or you are not allowed to use it. Try '!help'");
 }
 
@@ -128,7 +128,10 @@ $irc->on( irc_privmsg => sub {
 	#Handle messages that do the same thing for everyone
 	if($message =~ /^\s*!?\s*help\s*$/i) {
 		my $help=<<EINDE;
-Commands for private messages. Not everyone is allowed to use them all.
+Some commands are for botadmins only
+Some commands are not allowed in channels
+In channels precede them with a '!'
+
 disconnect     -> Disconnects this bot from the server
 help           -> Show this
 join #channel  -> Joins #channel (without leaving others)
@@ -139,8 +142,8 @@ EINDE
 		verbose(3,$help);
 	}
 	#Handle messages that do different things for users with different rights
-	elsif(defined $settings->{allowedusers}->{$from}) { allowedprivmsg($irc, $from, $message); }
-	else { notallowedprivmsg($irc, $from, $message); }
+	elsif(defined $settings->{allowedusers}->{$from}) { allowedprivmsg($irc, $from, $to, $message); }
+	else { notallowedprivmsg($irc, $from, $to, $message); }
 } );
 
 $irc->on( ctcp_version => sub {
