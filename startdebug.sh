@@ -22,7 +22,7 @@ $screen -d -m -S garobot docker run -it --rm --name ngircd linuxserver/ngircd
 sleep 3	#gives server a couple of seconds to start
 $screen -S garobot -X screen docker run -v $PWD/admin.conf:/usr/local/etc/irssi.conf:ro -it --rm --name irssiadmin irssi
 $screen -S garobot -X screen docker run -v $PWD/regular.conf:/usr/local/etc/irssi.conf:ro -it --rm --name irssiregular irssi
-$screen -S garobot -X screen docker run --read-only --tmpfs /tmp:rw,exec,size=100m --tmpfs /home/user/readwritedata:rw,exec,size=100m -v $PWD/readonlydata:/home/user/readonlydata:ro -v $PWD/code:/usr/local/bin/code:ro -it --rm --name garobot garobot /bin/bash
+$screen -S garobot -X screen docker run --read-only --tmpfs /tmp:rw,exec,size=100m --tmpfs /home/user:rw,exec,size=100m -v $PWD/readonlydata:/usr/local/readonlydata:ro -v $PWD/code:/usr/local/bin:ro -it --rm --name garobot garobot /bin/bash
 $screen -S garobot -X screen $PWD/debuginfo.sh
 
 $screen -S garobot -p 0 -X title server

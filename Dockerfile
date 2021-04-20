@@ -16,10 +16,8 @@
 
 #When not in dev move lines around and combine more
 FROM perl:5.32.1-buster
-RUN cpanm install Mojo::IRC
+RUN cpanm install Mojo::IRC Capture::SystemIO
 RUN rm -r /root/.cpanm
-RUN useradd --create-home --home-dir /home/user user && mkdir /home/user/readwritedata && mkdir /home/user/readonlydata && chown -R user:user /home/user
-ADD code/ircclient.pl /usr/local/bin
-RUN cpanm install Capture::SystemIO
+RUN useradd --create-home --home-dir /home/user user && chown -R user:user /home/user
 WORKDIR /home/user
-#Uncomment this when not in dev: USER user
+USER user

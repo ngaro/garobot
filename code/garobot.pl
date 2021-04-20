@@ -24,8 +24,7 @@ use Data::Dumper;
 use Capture::SystemIO qw/cs_system/;
 
 #default settings
-my $rodir= "/home/user/readonlydata";
-my $rwdir= "/home/user/readwritedata";
+my $rodir= "/usr/local/readonlydata";
 my $settingsfile = "settings";
 my $settings = { verbose => 3 };	#TODO set this lower in master
 
@@ -47,7 +46,7 @@ sub verb4hex {
 
 #Read the settings from the read/writedir
 sub readsettings {
-	open(my $fh, "$rwdir/$settingsfile") or die "Can't open settings";
+	open(my $fh, "$rodir/$settingsfile") or die "Can't open settings";
 	while(<$fh>) {
 		unless(/^\s*#/) {
 			/^(.*?)\t(.*)\n/;
@@ -158,7 +157,6 @@ sub notallowedprivmsg {
 }
 
 #Create the bot
-system("cp $rodir/$settingsfile $rwdir");
 readsettings;
 verbose(3, Dumper($settings));
 my $irc = Mojo::IRC->new(nick => $settings->{nick}, user => $settings->{user}, name => $settings->{name},  server => $settings->{server}) or die "Can't create IRC object";
