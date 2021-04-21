@@ -73,15 +73,17 @@ sub readsettings {
 
 #Send replies to commands, but keep the output reasonable
 sub sendreplies {
-	my ($irc, $from, $to, $linesref) = @_;
+	my ($irc, $from, $to, $linesref, $command) = @_;
 	#by default reply to the sender, but if it's send to the channel and has a reasonable size, reply to the channel
 	my $replyto = $from; $replyto = $to if($to=~/^#/);
 	my @lines = @$linesref; my $numlines = @lines;
-	if($numlines <= 3) {	#Max 3 lines: reply to the channel if sent to the channel, reply to sender if it's a private message
+	if($numlines == 0) {	#no output
+		$irc->write("PRIVMSG $replyto :### '$command' Doesn't output anything");
+	} elsif($numlines <= 3) {	#Max 3 lines: reply to the channel if sent to the channel, reply to sender if it's a private message
 		foreach(@lines) { $irc->write("PRIVMSG $replyto :$_"); }
 	} elsif($numlines <= 20) {	#3-20 lines:
 		if($replyto=~/^#/) {	#send first 2 lines to the channel if it was sent to the channel
-			$irc->write("PRIVMSG $replyto :The result was too large ($numlines lines). I'm sending it to $from. These are the first 2 lines:");
+			$irc->write("PRIVMSG $replyto :### The result was too large ($numlines lines). I'm sending it to $from. These are the first 2 lines:");
 			$irc->write("PRIVMSG $replyto :" . $lines[0]);
 			$irc->write("PRIVMSG $replyto :" . $lines[1]);
 		}
@@ -89,12 +91,12 @@ sub sendreplies {
 		foreach(@lines) { $irc->write("PRIVMSG $from :$_"); }
 	} else {	# > 20 lines
 		if($replyto=~/^#/) {	#send first 2 lines to the channel if it was sent to the channel
-			$irc->write("PRIVMSG $replyto :The result was WAY too large ($numlines lines). This are the first 2 and I'll send 20 lines to $from:");
+			$irc->write("PRIVMSG $replyto :### The result was WAY too large ($numlines lines). This are the first 2 and I'll send 20 lines to $from:");
 			$irc->write("PRIVMSG $replyto :" . $lines[0]);
 			$irc->write("PRIVMSG $replyto :" . $lines[1]);
 		}
 		#send 20 first lines to sender
-		$irc->write("PRIVMSG $from :The result was WAY too large ($numlines lines). This are the first 20 lines:");
+		$irc->write("PRIVMSG $from :### The result was WAY too large ($numlines lines). This are the first 20 lines:");
 		foreach(my $i=0; $i<20; $i++) { $irc->write("PRIVMSG $from :$lines[$i]"); }
 	}
 }
@@ -112,7 +114,7 @@ sub runbash {
 		$stdout = $$stdout;
 	}
 	chomp $stdout; my @outputlines = split(/\n/, $stdout);
-	sendreplies($irc, $from, $to, \@outputlines);
+	sendreplies($irc, $from, $to, \@outputlines, $command);
 	verbose(2, "Result of '!bash $command':\n$stdout");
 }
 
@@ -128,13 +130,16 @@ sub allowedprivmsg {
 			$irc->write("PRIVMSG $from :$nick is now a botadmin");
 			verbose(2, "$nick is now an admin");
 			return;
-		} elsif($message =~ /^\s*!?\s*disallow\s+(\S+)\s*$/i) {
+		} elsif($message =~ /^\s*!\s*disallow\s+(\S+)\s*$/i) {
 			my $nick = $1;
 			$settings->{allowedusers}->{$nick} = undef;
 			$irc->write("PRIVMSG $nick :You are no longer a botadmin");
 			$irc->write("PRIVMSG $from :$nick is no longer a botadmin");
 			verbose(2, "$nick is no longer an admin");
 			return;
+		} elsif($message =~ /^\s*!\s*restart/) {
+			verbose(2, "Restarting");
+			exec $0, @ARGV;
 		}
 	}
 	if($message =~ /^\s*!\s*disconnect\s*$/i) {
@@ -220,6 +225,7 @@ nick newnick   -> Changes nick to newnick
 allow nick     -> nick becomes botadmin
 disallow nick  -> nick is no longer botadmin
 bash command   -> run command in bash
+restart        -> clears all settings and restarts the bot (filesystem status is preserved)
 EINDE
 		foreach(split /\n/, $help) { $irc->write("PRIVMSG $from :$_"); }
 		verbose(3,$help);
