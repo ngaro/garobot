@@ -105,10 +105,10 @@ sub sendreplies {
 #runsh fails if /tmp is not writable (cs_system needs this)
 sub runsh {
 	my ($irc, $from, $to, $command) = @_;
-	my ($stdout, $stderr, $returncode) = capture { system("timeout 60 sh -c '$command'"); };
+	my ($stdout, $stderr, $returncode) = capture { system("timeout $settings->{waitsh} sh -c '$command'"); };
 	if($returncode == 31744) {
 		my $replyto = $from; $replyto = $to if($to=~/^#/);
-		$irc->write("PRIVMSG $replyto :### I stopped '$command' because it took longer then 1 minute" );
+		$irc->write("PRIVMSG $replyto :### I stopped '$command' because it took longer then " . $settings->{waitsh} . " seconds" );
 	}
 	$stdout.=$stderr;
 	chomp $stdout; my @outputlines = split(/\n/, $stdout);

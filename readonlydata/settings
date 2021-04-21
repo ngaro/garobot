@@ -5,5 +5,6 @@ nick	garobot
 user	Garobot
 name	garobot
 server	172.17.0.2
+waitsh	20
 #seperate nicknames allowed to command garobot by spaces
 allowedusers	garo admin
