@@ -20,5 +20,5 @@ RUN cpanm install Mojo::IRC Capture::Tiny
 RUN rm -r /root/.cpanm
 RUN useradd --create-home --home-dir /home/user user && chown -R user:user /home/user
 RUN echo "user hard nproc 50" >> /etc/security/limits.conf
+RUN apt-get update && apt-get -y install sudo
 WORKDIR /home/user
-USER user

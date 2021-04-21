@@ -170,6 +170,7 @@ sub notallowedprivmsg {
 }
 
 #Create the bot
+if($< eq 0) { exec("sudo", "-u", "user", $0, @ARGV); }
 readsettings;
 if($settings->{server}=~/ /) { print STDERR "ERROR: Too much servers given, use a different bot for each server\n";  exit 1; }
 verbose(3, Dumper($settings));
