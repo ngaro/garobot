@@ -16,7 +16,7 @@
 
 #When not in dev move lines around and combine more
 FROM perl:5.32.1-buster
-RUN cpanm install Mojo::IRC Capture::Tiny
+RUN cpanm install Mojo::IRC Capture::Tiny Term::ReadPassword
 RUN rm -r /root/.cpanm
 RUN useradd --create-home --home-dir /home/user user && chown -R user:user /home/user
 RUN apt-get update && apt-get -y install sudo psmisc

@@ -22,6 +22,7 @@ use warnings;
 use Mojo::IRC;
 use Data::Dumper;
 use Capture::Tiny ':all';
+use Term::ReadPassword;
 
 #default settings
 my $rodir= "/usr/local/readonlydata";
@@ -66,6 +67,10 @@ sub readsettings {
 		if(/^--(.*?)=(.*)/) {
 			my $key = $1; my $value = $2;
 			if(defined $cmdlinesettings->{$key}) { $cmdlinesettings->{$key}.=" $value" } else { $cmdlinesettings->{$key} = $value }
+		}
+		if(/^--nickserv/) {
+			$settings->{nickserv} = read_password('NickServ password: ');
+			chomp $settings->{nickserv};
 		}
 	}
 	foreach(keys %$cmdlinesettings) { $settings->{$_} = $cmdlinesettings->{$_}; }	#cmdlinesettings overwrite (not append) settings in $settings file
@@ -201,6 +206,7 @@ $irc->on( irc_privmsg => sub {
 	my ($irc, $msghash) = @_;
 	verbose(4, "Messagehash: ".Dumper($msghash));
 	my $message = @{$msghash->{params}}[1];
+	if($msghash->{prefix} =~ /NickServ/) { verbose(2, "'" . $msghash->{prefix} . "' sent '$message'"); }
 	return unless($message=~/^\s*!\s*/);	#Only reply to !-commands
 	my $from = IRC::Utils::parse_user($msghash->{prefix});
 	my $to = @{$msghash->{params}}[0];
@@ -232,6 +238,28 @@ EINDE
 
 $irc->on( ctcp_version => sub {
 	verbose(2, "Connected");
+	if(defined $settings->{nickserv}) {
+		verbose(2, "Identifying...");
+		$irc->write("PRIVMSG NickServ :identify $settings->{nickserv}");
+	}
+} );
+
+$irc->on( irc_notice => sub {
+	my ($irc, $msghash) = @_;
+	verbose(4, "Noticehash: ".Dumper($msghash));
+	my $notice = @{$msghash->{params}}[1];
+	my $from = IRC::Utils::parse_user($msghash->{prefix});
+	verbose(2, "From '$from' this notice: '$notice'");
+	verb4hex($notice);
+	if($from eq "NickServ") {
+		if($notice=~/You\s+are\s+now\s+identified\s+for\s+/i) {
+			verbose(1, "Identified");
+		} elsif($notice=~/Invalid\s+password\s+for\s+/i) {
+			verbose(1, "Failed to identify");
+		} else {
+			verbose(1, "NickServ sent this: '$notice'");
+		}
+	}
 } );
 
 #Start the bot
