@@ -125,12 +125,14 @@ sub allowedprivmsg {
 			my $nick = $1;
 			$settings->{allowedusers}->{$nick} = 1;
 			$irc->write("PRIVMSG $nick :$from made you a botadmin");
+			$irc->write("PRIVMSG $from :$nick is now a botadmin");
 			verbose(2, "$nick is now an admin");
 			return;
 		} elsif($message =~ /^\s*!?\s*disallow\s+(\S+)\s*$/i) {
 			my $nick = $1;
 			$settings->{allowedusers}->{$nick} = undef;
 			$irc->write("PRIVMSG $nick :You are no longer a botadmin");
+			$irc->write("PRIVMSG $from :$nick is no longer a botadmin");
 			verbose(2, "$nick is no longer an admin");
 			return;
 		}
