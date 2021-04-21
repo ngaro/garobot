@@ -91,12 +91,12 @@ sub sendreplies {
 		foreach(@lines) { $irc->write("PRIVMSG $from :$_"); }
 	} else {	# > 20 lines
 		if($replyto=~/^#/) {	#send first 2 lines to the channel if it was sent to the channel
-			$irc->write("PRIVMSG $replyto :### The result was WAY too large ($numlines lines). This are the first 2 and I'll send 20 lines to $from:");
+			$irc->write("PRIVMSG $replyto :### The result was WAY too large ($numlines lines). These are the first 2 and I'll send 20 lines to $from:");
 			$irc->write("PRIVMSG $replyto :" . $lines[0]);
 			$irc->write("PRIVMSG $replyto :" . $lines[1]);
 		}
 		#send 20 first lines to sender
-		$irc->write("PRIVMSG $from :### The result was WAY too large ($numlines lines). This are the first 20 lines:");
+		$irc->write("PRIVMSG $from :### The result was WAY too large ($numlines lines). These are the first 20 lines:");
 		foreach(my $i=0; $i<20; $i++) { $irc->write("PRIVMSG $from :$lines[$i]"); }
 	}
 }
