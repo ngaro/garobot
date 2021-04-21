@@ -106,7 +106,7 @@ sub sendreplies {
 sub runsh {
 	my ($irc, $from, $to, $command) = @_;
 	my ($stdout, $stderr, $returncode) = capture { system("timeout $settings->{waitsh} sh -c '$command'"); };
-	while( system("killall sh") == 0 ) {}
+	while( system("killall sh") == 0 ) {}	#forkbomb protection
 	if($returncode == 31744) {
 		my $replyto = $from; $replyto = $to if($to=~/^#/);
 		$irc->write("PRIVMSG $replyto :### I stopped '$command' because it took longer then " . $settings->{waitsh} . " seconds" );
