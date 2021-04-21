@@ -102,8 +102,8 @@ sub sendreplies {
 }
 
 #run $command requested by $from to channel $to and sent the output here, our to $from if there is no channel
-#runbash fails if /tmp is not writable (cs_system needs this)
-sub runbash {
+#runsh fails if /tmp is not writable (cs_system needs this)
+sub runsh {
 	my ($irc, $from, $to, $command) = @_;
 	my ($stdout, $stderr, $returncode) = capture { system("timeout 60 sh -c '$command'"); };
 	if($returncode == 31744) {
@@ -113,7 +113,7 @@ sub runbash {
 	$stdout.=$stderr;
 	chomp $stdout; my @outputlines = split(/\n/, $stdout);
 	sendreplies($irc, $from, $to, \@outputlines, $command);
-	verbose(2, "Result of '!bash $command':\n$stdout");
+	verbose(2, "Result of '!sh $command':\n$stdout");
 }
 
 #Handle private message with rights
@@ -153,8 +153,8 @@ sub allowedprivmsg {
 	} elsif($message =~ /^nick\s+(\S+)\s*$/i) {
 		my $nick = $1;
 		$irc->write("NICK $nick", sub { verbose(2, "Changed nick to '$nick'"); } );
-	} elsif($message =~ /^bash\s+(.*)\s*$/i) {
-		runbash($irc, $from, $to, $1);
+	} elsif($message =~ /^sh\s+(.*)\s*$/i) {
+		runsh($irc, $from, $to, $1);
 	} else {
 		$irc->write("PRIVMSG $from :I am not doing anything with this action.");
 	}
@@ -217,7 +217,7 @@ Some commands are not allowed in channels
 !nick newnick   -> Changes nick to newnick
 !allow nick     -> nick becomes botadmin
 !disallow nick  -> nick is no longer botadmin
-!bash command   -> run command in bash
+!sh command     -> run command in a shell
 !restart        -> clears all settings and restarts the bot (filesystem status is preserved)
 EINDE
 		foreach(split /\n/, $help) { $irc->write("PRIVMSG $from :$_"); }
