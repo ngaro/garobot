@@ -4,6 +4,6 @@
 nick	garobot
 user	Garobot
 name	garobot
-server	172.17.0.2
+server	niven.freenode.net
 #seperate nicknames allowed to command garobot by spaces
-allowedusers	garo admin
+allowedusers	garo
