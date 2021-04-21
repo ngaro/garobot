@@ -21,7 +21,7 @@ use strict;
 use warnings;
 use Mojo::IRC;
 use Data::Dumper;
-use Capture::SystemIO qw/cs_system/;
+use Capture::Tiny ':all';
 
 #default settings
 my $rodir= "/usr/local/readonlydata";
@@ -73,15 +73,17 @@ sub readsettings {
 
 #Send replies to commands, but keep the output reasonable
 sub sendreplies {
-	my ($irc, $from, $to, $linesref) = @_;
+	my ($irc, $from, $to, $linesref, $command) = @_;
 	#by default reply to the sender, but if it's send to the channel and has a reasonable size, reply to the channel
 	my $replyto = $from; $replyto = $to if($to=~/^#/);
 	my @lines = @$linesref; my $numlines = @lines;
-	if($numlines <= 3) {	#Max 3 lines: reply to the channel if sent to the channel, reply to sender if it's a private message
+	if($numlines == 0) {	#no output
+		$irc->write("PRIVMSG $replyto :### '$command' Doesn't output anything");
+	} elsif($numlines <= 3) {	#Max 3 lines: reply to the channel if sent to the channel, reply to sender if it's a private message
 		foreach(@lines) { $irc->write("PRIVMSG $replyto :$_"); }
 	} elsif($numlines <= 20) {	#3-20 lines:
 		if($replyto=~/^#/) {	#send first 2 lines to the channel if it was sent to the channel
-			$irc->write("PRIVMSG $replyto :The result was too large ($numlines lines). I'm sending it to $from. These are the first 2 lines:");
+			$irc->write("PRIVMSG $replyto :### The result was too large ($numlines lines). I'm sending it to $from. These are the first 2 lines:");
 			$irc->write("PRIVMSG $replyto :" . $lines[0]);
 			$irc->write("PRIVMSG $replyto :" . $lines[1]);
 		}
@@ -89,31 +91,30 @@ sub sendreplies {
 		foreach(@lines) { $irc->write("PRIVMSG $from :$_"); }
 	} else {	# > 20 lines
 		if($replyto=~/^#/) {	#send first 2 lines to the channel if it was sent to the channel
-			$irc->write("PRIVMSG $replyto :The result was WAY too large ($numlines lines). This are the first 2 and I'll send 20 lines to $from:");
+			$irc->write("PRIVMSG $replyto :### The result was WAY too large ($numlines lines). These are the first 2 and I'll send 20 lines to $from:");
 			$irc->write("PRIVMSG $replyto :" . $lines[0]);
 			$irc->write("PRIVMSG $replyto :" . $lines[1]);
 		}
 		#send 20 first lines to sender
-		$irc->write("PRIVMSG $from :The result was WAY too large ($numlines lines). This are the first 20 lines:");
+		$irc->write("PRIVMSG $from :### The result was WAY too large ($numlines lines). These are the first 20 lines:");
 		foreach(my $i=0; $i<20; $i++) { $irc->write("PRIVMSG $from :$lines[$i]"); }
 	}
 }
 
 #run $command requested by $from to channel $to and sent the output here, our to $from if there is no channel
-#runbash fails if /tmp is not writable (cs_system needs this)
-sub runbash {
+#runsh fails if /tmp is not writable (cs_system needs this)
+sub runsh {
 	my ($irc, $from, $to, $command) = @_;
-	my $stderr; my $stdout;
-	eval { ($stdout, $stderr) = cs_system("$command"); };	#normally we ignore stderr
-	if($@) {	#When bash complains we send stderr
-		$stdout = $@->{stderr};
-		$stdout =~ s/\s+at\s+\S+SystemIO.pm\s+line\s+\d+\.\s*\n$//;
-	} else {	#stdout is standard a ref
-		$stdout = $$stdout;
+	my ($stdout, $stderr, $returncode) = capture { system("timeout $settings->{waitsh} sh -c '$command'"); };
+	while( system("killall sh") == 0 ) {}
+	if($returncode == 31744) {
+		my $replyto = $from; $replyto = $to if($to=~/^#/);
+		$irc->write("PRIVMSG $replyto :### I stopped '$command' because it took longer then " . $settings->{waitsh} . " seconds" );
 	}
+	$stdout.=$stderr;
 	chomp $stdout; my @outputlines = split(/\n/, $stdout);
-	sendreplies($irc, $from, $to, \@outputlines);
-	verbose(2, "Result of '!bash $command':\n$stdout");
+	sendreplies($irc, $from, $to, \@outputlines, $command);
+	verbose(2, "Result of '!sh $command':\n$stdout");
 }
 
 #Handle private message with rights
@@ -121,35 +122,40 @@ sub allowedprivmsg {
 	my ($irc, $from, $to, $message) = @_;
 	if($to=~/^#/) { # $from sent to channel
 	} else { # $from sent to me
-		if($message =~ /^\s*!\s*allow\s+(\S+)\s*$/i) {
+		if($message =~ /^allow\s+(\S+)\s*$/i) {
 			my $nick = $1;
 			$settings->{allowedusers}->{$nick} = 1;
 			$irc->write("PRIVMSG $nick :$from made you a botadmin");
+			$irc->write("PRIVMSG $from :$nick is now a botadmin");
 			verbose(2, "$nick is now an admin");
 			return;
-		} elsif($message =~ /^\s*!?\s*disallow\s+(\S+)\s*$/i) {
+		} elsif($message =~ /^disallow\s+(\S+)\s*$/i) {
 			my $nick = $1;
 			$settings->{allowedusers}->{$nick} = undef;
 			$irc->write("PRIVMSG $nick :You are no longer a botadmin");
+			$irc->write("PRIVMSG $from :$nick is no longer a botadmin");
 			verbose(2, "$nick is no longer an admin");
 			return;
+		} elsif($message =~ /^restart\s*/) {
+			verbose(2, "Restarting");
+			exec $0, @ARGV;
 		}
 	}
-	if($message =~ /^\s*!\s*disconnect\s*$/i) {
+	if($message =~ /^disconnect\s*$/i) {
 		$irc->write("PRIVMSG $from :Disconnecting...");
 		$irc->disconnect( sub { verbose(2, "Disconnected"); } );
 		exit;
-	} elsif($message =~ /^\s*!\s*join\s+(#\S+)\s*$/i) {
+	} elsif($message =~ /^join\s+(#\S+)\s*$/i) {
 		my $channel = $1;
 		$irc->write("JOIN $channel", sub { verbose(2, "Joined '$channel'"); } );
-	} elsif($message =~ /^\s*!\s*leave\s+(#\S+)\s*$/i) {
+	} elsif($message =~ /^leave\s+(#\S+)\s*$/i) {
 		my $channel = $1;
 		$irc->write("PART $channel", sub { verbose(2, "Left '$channel'"); } );
-	} elsif($message =~ /^\s*!\s*nick\s+(\S+)\s*$/i) {
+	} elsif($message =~ /^nick\s+(\S+)\s*$/i) {
 		my $nick = $1;
 		$irc->write("NICK $nick", sub { verbose(2, "Changed nick to '$nick'"); } );
-	} elsif($message =~ /^\s*!\s*bash\s+(.*)\s*$/i) {
-		runbash($irc, $from, $to, $1);
+	} elsif($message =~ /^sh\s+(.*)\s*$/i) {
+		runsh($irc, $from, $to, $1);
 	} else {
 		$irc->write("PRIVMSG $from :I am not doing anything with this action.");
 	}
@@ -165,6 +171,7 @@ sub notallowedprivmsg {
 }
 
 #Create the bot
+if($< eq 0) { exec("sudo", "-u", "user", $0, @ARGV); }
 readsettings;
 if($settings->{server}=~/ /) { print STDERR "ERROR: Too much servers given, use a different bot for each server\n";  exit 1; }
 verbose(3, Dumper($settings));
@@ -194,30 +201,26 @@ $irc->on( irc_privmsg => sub {
 	my ($irc, $msghash) = @_;
 	verbose(4, "Messagehash: ".Dumper($msghash));
 	my $message = @{$msghash->{params}}[1];
+	return unless($message=~/^\s*!\s*/);	#Only reply to !-commands
 	my $from = IRC::Utils::parse_user($msghash->{prefix});
 	my $to = @{$msghash->{params}}[0];
 	verbose(3, "From '$from' to '$to' this message: '$message'");
 	verb4hex($message);
-	#Handle messages that do the same thing for everyone
-	if($to=~/^#/) { # $from sent to channel
-		return unless($message=~/^\s*!\s*/);	#Only reply to !-commands in channels
-	} else { # $from sent to me
-		$message="!$message" unless($message=~/^\s*!/)	#Make sure there is a '!' so we can handle it better
-	}
-	if($message =~ /^\s*!\s*help\s*$/i) {
+	$message=~s/^\s*!\s*//;
+	if($message =~ /^help\s*$/i) {
 		my $help=<<EINDE;
 Some commands are for botadmins only
 Some commands are not allowed in channels
-In channels precede them with a '!'
 
-disconnect     -> Disconnects this bot from the server
-help           -> Show this
-join #channel  -> Joins #channel (without leaving others)
-leave #channel -> Leave #channel
-nick newnick   -> Changes nick to newnick
-allow nick     -> nick becomes botadmin
-disallow nick  -> nick is no longer botadmin
-bash command   -> run command in bash
+!disconnect     -> Disconnects this bot from the server
+!help           -> Show this
+!join #channel  -> Joins #channel (without leaving others)
+!leave #channel -> Leave #channel
+!nick newnick   -> Changes nick to newnick
+!allow nick     -> nick becomes botadmin
+!disallow nick  -> nick is no longer botadmin
+!sh command     -> run command in a shell
+!restart        -> clears all settings and restarts the bot (filesystem status is preserved)
 EINDE
 		foreach(split /\n/, $help) { $irc->write("PRIVMSG $from :$_"); }
 		verbose(3,$help);
