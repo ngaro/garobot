@@ -19,5 +19,5 @@
 serverip=$(docker inspect ngircd -f "{{ .NetworkSettings.IPAddress }}")
 echo "The ip of the server is: $serverip"
 echo "Make sure it's in admin.conf and regular.conf"
-echo "Now run (in window 'garobot'): /usr/local/sbin/garobot.pl $serverip"
+echo "Now run (in window 'garobot'): /usr/local/sbin/garobot.pl --server=$serverip"
 read notimportant

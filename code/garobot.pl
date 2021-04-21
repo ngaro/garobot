@@ -61,6 +61,14 @@ sub readsettings {
 		}
 	}
 	close $fh;
+	my $cmdlinesettings = {};
+	foreach(@ARGV) {
+		if(/^--(.*?)=(.*)/) {
+			my $key = $1; my $value = $2;
+			if(defined $cmdlinesettings->{$key}) { $cmdlinesettings->{$key}.=" $value" } else { $cmdlinesettings->{$key} = $value }
+		}
+	}
+	foreach(keys %$cmdlinesettings) { $settings->{$_} = $cmdlinesettings->{$_}; }	#cmdlinesettings overwrite (not append) settings in $settings file
 }
 
 #Send replies to commands, but keep the output reasonable
@@ -158,6 +166,7 @@ sub notallowedprivmsg {
 
 #Create the bot
 readsettings;
+if($settings->{server}=~/ /) { print STDERR "ERROR: Too much servers given, use a different bot for each server\n";  exit 1; }
 verbose(3, Dumper($settings));
 my $irc = Mojo::IRC->new(nick => $settings->{nick}, user => $settings->{user}, name => $settings->{name},  server => $settings->{server}) or die "Can't create IRC object";
 $irc->parser(Parse::IRC->new(ctcp => 1));
