@@ -16,7 +16,8 @@
 #You should have received a copy of the GNU General Public License
 #along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-echo -n "The ip of the server is: "; docker inspect ngircd -f "{{ .NetworkSettings.IPAddress }}"
-echo "Make sure it's in $PWD/readonlydata/settings and admin.conf and regular.conf."
-echo "Now run /usr/local/bin/code/ircclient.pl in window 'garobot'";
+serverip=$(docker inspect ngircd -f "{{ .NetworkSettings.IPAddress }}")
+echo "The ip of the server is: $serverip"
+echo "Make sure it's in admin.conf and regular.conf"
+echo "Now run (in window 'garobot'): /usr/local/sbin/garobot.pl $serverip"
 read notimportant
