@@ -21,7 +21,7 @@ use strict;
 use warnings;
 use Mojo::IRC;
 use Data::Dumper;
-use Capture::SystemIO qw/cs_system/;
+use Capture::Tiny ':all';
 
 #default settings
 my $rodir= "/usr/local/readonlydata";
@@ -105,14 +105,12 @@ sub sendreplies {
 #runbash fails if /tmp is not writable (cs_system needs this)
 sub runbash {
 	my ($irc, $from, $to, $command) = @_;
-	my $stderr; my $stdout;
-	eval { ($stdout, $stderr) = cs_system("$command"); };	#normally we ignore stderr
-	if($@) {	#When bash complains we send stderr
-		$stdout = $@->{stderr};
-		$stdout =~ s/\s+at\s+\S+SystemIO.pm\s+line\s+\d+\.\s*\n$//;
-	} else {	#stdout is standard a ref
-		$stdout = $$stdout;
+	my ($stdout, $stderr, $returncode) = capture { system("timeout 60 sh -c '$command'"); };
+	if($returncode == 31744) {
+		my $replyto = $from; $replyto = $to if($to=~/^#/);
+		$irc->write("PRIVMSG $replyto :### I stopped '$command' because it took longer then 1 minute" );
 	}
+	$stdout.=$stderr;
 	chomp $stdout; my @outputlines = split(/\n/, $stdout);
 	sendreplies($irc, $from, $to, \@outputlines, $command);
 	verbose(2, "Result of '!bash $command':\n$stdout");
