@@ -29,6 +29,9 @@ my $rodir= "/usr/local/readonlydata";
 my $settingsfile = "settings";
 my $settings = { verbose => 3 };	#TODO set this lower in master
 
+#global vars
+my $currentnick;
+
 #prints $message to STDOUT unless $verbose is higher then the allowed setting
 sub verbose {
 	my ($verbose, $message) = @_;
@@ -157,8 +160,8 @@ sub allowedprivmsg {
 		my $channel = $1;
 		$irc->write("PART $channel", sub { verbose(2, "Left '$channel'"); } );
 	} elsif($message =~ /^nick\s+(\S+)\s*$/i) {
-		my $nick = $1;
-		$irc->write("NICK $nick", sub { verbose(2, "Changed nick to '$nick'"); } );
+		$currentnick = $1;
+		$irc->write("NICK $currentnick", sub { verbose(4, "Changed nick to '$currentnick'"); } );
 	} elsif($message =~ /^sh\s+(.*)\s*$/i) {
 		runsh($irc, $from, $to, $1);
 	} else {
@@ -181,6 +184,7 @@ if($< eq 0) {
 	exec("sudo", "-u", "user", $0, @ARGV);
 }
 readsettings;
+$currentnick = $settings->{nick};
 if($settings->{server}=~/ /) { print STDERR "ERROR: Too much servers given, use a different bot for each server\n";  exit 1; }
 verbose(3, Dumper($settings));
 my $irc = Mojo::IRC->new(nick => $settings->{nick}, user => $settings->{user}, name => $settings->{name},  server => $settings->{server}) or die "Can't create IRC object";
@@ -229,10 +233,18 @@ Some commands are not allowed in channels
 !allow nick     -> nick becomes botadmin
 !disallow nick  -> nick is no longer botadmin
 !sh command     -> run command in a shell
+!poccy nick     -> use magic to get rid of demon 'nick'
 !restart        -> clears all settings and restarts the bot (filesystem status is preserved)
 EINDE
 		foreach(split /\n/, $help) { $irc->write("PRIVMSG $from :$_"); }
 		verbose(3,$help);
+	} elsif($message =~ /^poccy\s*(\S+)$/i) {
+		my $demon = $1;
+		$irc->write("NICK garodemonkiller", sub { verbose(2, "Changed nick to 'garodemonkiller'"); } );
+		$irc->write("PRIVMSG $demon :The power of Christ compels you !!! AWAY Demon !!! BE GOOOOOONE !!!");
+		$irc->write("PRIVMSG $demon :https://www.youtube.com/watch?v=f0ZS9sImoOE");
+		$irc->write("NICK $currentnick", sub { verbose(2, "Changed nick to '$currentnick'"); } );
+		verbose(3,"!poccy to $demon\n");
 	}
 	#Handle messages that do different things for users with different rights
 	elsif(defined $settings->{allowedusers}->{$from}) { allowedprivmsg($irc, $from, $to, $message); }
