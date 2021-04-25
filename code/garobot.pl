@@ -23,6 +23,7 @@ use Mojo::IRC;
 use Data::Dumper;
 use Capture::Tiny ':all';
 use Term::ReadPassword;
+use WWW::Mechanize; use WWW::Mechanize::TreeBuilder;
 
 #default settings
 my $rodir= "/usr/local/readonlydata";
@@ -185,6 +186,7 @@ if($< eq 0) {
 }
 readsettings;
 $currentnick = $settings->{nick};
+my $mech = WWW::Mechanize->new(autocheck=>0); WWW::Mechanize::TreeBuilder->meta->apply($mech);
 if($settings->{server}=~/ /) { print STDERR "ERROR: Too much servers given, use a different bot for each server\n";  exit 1; }
 verbose(3, Dumper($settings));
 my $irc = Mojo::IRC->new(nick => $settings->{nick}, user => $settings->{user}, name => $settings->{name},  server => $settings->{server}) or die "Can't create IRC object";
@@ -234,10 +236,30 @@ Some commands are not allowed in channels
 !disallow nick  -> nick is no longer botadmin
 !sh command     -> run command in a shell
 !poccy nick     -> use magic to get rid of demon 'nick'
+!w thing        -> get some info about thing from wikipedia
 !restart        -> clears all settings and restarts the bot (filesystem status is preserved)
 EINDE
 		foreach(split /\n/, $help) { $irc->write("PRIVMSG $from :$_"); }
 		verbose(3,$help);
+	} elsif($message =~ /^w\s*(\S+)/) {
+		my $subject = $1; my $info = "Sorry, I don't know anything about that, find someone else to help you.";
+		$mech->get("https://en.wikipedia.org/wiki/$subject");
+		if($mech->success and $mech->is_html) {
+			#search the first 'real' <p></p>. This contains a short description of $subject. <p class="mw-empty-elt"></p> is usually the first <p> but it's empty
+			my $firstrealp = $mech->look_down('_tag' => 'p', sub { not defined $_[0]->attr('class') or $_[0]->attr('class') ne "mw-empty-elt"; } );
+			foreach($firstrealp->look_down('class'=>'reference')) { $_->delete(); }	#remove all citations so that we don't get "[number]" things in the output
+			foreach($firstrealp->look_down('_tag'=>'span')) { $_->delete(); }	#remove all <span>'s (hard to parse)
+			$info = ucfirst($firstrealp->as_text()); $info=~s/\s*$//; $info=~s/\(\s*;/\(/;	#After removing span's sometimes things like "( ;" are left behind
+		}
+		foreach my $line (split(/\.\s+/, $info)) {
+			$line.='.'; $line=~s/\.\.$/./;
+			if($to=~/^#/) { # $from sent to channel
+				$irc->write("PRIVMSG $to :$line")
+			} else { # $from sent to me
+				$irc->write("PRIVMSG $from :$line")
+			}
+			verbose(2, "!w '$subject' -> '$line'");
+		}
 	} elsif($message =~ /^poccy\s*(\S+)$/i) {
 		my $demon = $1;
 		$irc->write("NICK garodemonkiller", sub { verbose(2, "Changed nick to 'garodemonkiller'"); } );
