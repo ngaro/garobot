@@ -241,15 +241,20 @@ Some commands are not allowed in channels
 EINDE
 		foreach(split /\n/, $help) { $irc->write("PRIVMSG $from :$_"); }
 		verbose(3,$help);
-	} elsif($message =~ /^w\s*(\S+)/) {
+	} elsif($message =~ /^w\s*(.*)\s*/) {
 		my $subject = $1; my $info = "Sorry, I don't know anything about that, find someone else to help you.";
-		$mech->get("https://en.wikipedia.org/wiki/$subject");
+		$subject=~s/\s+/_/g;
+		verbose(3, "Fetching http://en.wikipedia.org/wiki/$subject");
+		$mech->get("http://en.wikipedia.org/wiki/$subject");
+		verbose(3, "Fetched http://en.wikipedia.org/wiki/$subject");
 		if($mech->success and $mech->is_html) {
+			verbose(3, "Parsing http://en.wikipedia.org/wiki/$subject");
 			#search the first 'real' <p></p>. This contains a short description of $subject. <p class="mw-empty-elt"></p> is usually the first <p> but it's empty
 			my $firstrealp = $mech->look_down('_tag' => 'p', sub { not defined $_[0]->attr('class') or $_[0]->attr('class') ne "mw-empty-elt"; } );
 			foreach($firstrealp->look_down('class'=>'reference')) { $_->delete(); }	#remove all citations so that we don't get "[number]" things in the output
 			foreach($firstrealp->look_down('_tag'=>'span')) { $_->delete(); }	#remove all <span>'s (hard to parse)
 			$info = ucfirst($firstrealp->as_text()); $info=~s/\s*$//; $info=~s/\(\s*;/\(/;	#After removing span's sometimes things like "( ;" are left behind
+			verbose(3, "Parsed http://en.wikipedia.org/wiki/$subject");
 		}
 		foreach my $line (split(/\.\s+/, $info)) {
 			$line.='.'; $line=~s/\.\.$/./;
