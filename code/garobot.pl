@@ -211,6 +211,61 @@ $irc->on( error => sub {
 	print STDERR "ERROR: (Streamerror) '$error'\n";
 } );
 
+sub fetch {
+	my ($mech, $url) = @_;
+	print STDERR "Fetching '$url'\n";
+	$mech->get($url);
+	if($mech->success and $mech->is_html) {
+		return 1;
+	} else {
+		print STDERR "Couldn't fetch '$url'\n";
+		return undef;
+	}
+}
+
+sub searchbettersubject {
+	my ($mech, $subject) = @_;
+	print STDERR "Searching a better subject for '$subject'\n";
+	my $url = 'https://duckduckgo.com/html?q='.$subject;
+	return undef if(not defined fetch($mech, $url));
+	my @wikilinks = $mech->look_down('_tag'=>'a', sub { defined $_[0]->{"_content"}->[0] and $_[0]->{"_content"}->[0]=~/^\s*en.wikipedia.org\/wiki\//;});
+	if(@wikilinks > 0) {
+		my $subject = $wikilinks[0]->{"_content"}->[0];
+		$subject=~s/^.*\/(.*?)\s*$/$1/;
+		print STDERR "New subject '$subject' found\n";
+		return $subject;
+	}
+	return undef;
+}
+
+sub parseforabstract {
+	my ($mech, $subject) = @_;
+	print STDERR "Searching info about '$subject' (+-signs instead of spaces here is normal)\n";
+	my $url = 'https://duckduckgo.com/?q='.$subject.'&t=lm&atb=v130-1&ia=web';
+	return undef if(not defined fetch($mech, $url));
+	my @scripts = $mech->look_down('_tag' => 'script', sub { defined $_[0]->{"_content"}->[0] and $_[0]->{"_content"}->[0]=~/^DDG\.ready/; } );
+	if(@scripts > 0) {
+		my $abstract = $scripts[0]->{"_content"}->[0];
+		$abstract=~s/^.*?"Abstract":"(.*?)","AbstractSource":".*/$1/;
+		print STDERR "Abstract '$abstract' found\n";
+		return $abstract;
+	}
+	return undef;
+}
+
+sub fetchandparseddg{
+	my ($mech, $subject) = @_;
+	$subject=~s/\s+/+/g;
+	my $output = parseforabstract($mech, $subject);
+	if(defined $output) { return $output; } #subject has wikipedia info
+	$subject = searchbettersubject($mech, $subject);
+	if(defined $subject) { #subject has a link to a subject that wikipedia knows
+		$output = parseforabstract($mech, $subject);
+		if(defined $output) { return $output; } #that new subject has wikipedia info
+	}
+	return "Sorry, I don't know anything about this.";
+}
+
 $irc->on( irc_privmsg => sub {
 	my ($irc, $msghash) = @_;
 	verbose(4, "Messagehash: ".Dumper($msghash));
@@ -241,21 +296,9 @@ Some commands are not allowed in channels
 EINDE
 		foreach(split /\n/, $help) { $irc->write("PRIVMSG $from :$_"); }
 		verbose(3,$help);
-	} elsif($message =~ /^w\s*(.*)\s*/) {
-		my $subject = $1; my $info = "Sorry, I don't know anything about that, find someone else to help you.";
-		$subject=~s/\s+/_/g;
-		verbose(3, "Fetching http://en.wikipedia.org/wiki/$subject");
-		$mech->get("http://en.wikipedia.org/wiki/$subject");
-		verbose(3, "Fetched http://en.wikipedia.org/wiki/$subject");
-		if($mech->success and $mech->is_html) {
-			verbose(3, "Parsing http://en.wikipedia.org/wiki/$subject");
-			#search the first 'real' <p></p>. This contains a short description of $subject. <p class="mw-empty-elt"></p> is usually the first <p> but it's empty
-			my $firstrealp = $mech->look_down('_tag' => 'p', sub { not defined $_[0]->attr('class') or $_[0]->attr('class') ne "mw-empty-elt"; } );
-			foreach($firstrealp->look_down('class'=>'reference')) { $_->delete(); }	#remove all citations so that we don't get "[number]" things in the output
-			foreach($firstrealp->look_down('_tag'=>'span')) { $_->delete(); }	#remove all <span>'s (hard to parse)
-			$info = ucfirst($firstrealp->as_text()); $info=~s/\s*$//; $info=~s/\(\s*;/\(/;	#After removing span's sometimes things like "( ;" are left behind
-			verbose(3, "Parsed http://en.wikipedia.org/wiki/$subject");
-		}
+	} elsif($message =~ /^w\s*(.*?)\s*$/) {
+		my $subject = $1;
+		my $info = fetchandparseddg($mech, $subject);
 		foreach my $line (split(/\.\s+/, $info)) {
 			$line.='.'; $line=~s/\.\.$/./;
 			if($to=~/^#/) { # $from sent to channel
