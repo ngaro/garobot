@@ -82,31 +82,48 @@ sub readsettings {
 
 #Send replies to commands, but keep the output reasonable
 sub sendreplies {
-	my ($irc, $from, $to, $linesref, $command) = @_;
+	my ($irc, $from, $to, $linesref, $command, $questiontype) = @_;
 	#by default reply to the sender, but if it's send to the channel and has a reasonable size, reply to the channel
 	my $replyto = $from; $replyto = $to if($to=~/^#/);
 	my @lines = @$linesref; my $numlines = @lines;
 	if($numlines == 0) {	#no output
-		$irc->write("PRIVMSG $replyto :### '$command' Doesn't output anything");
+		if($questiontype eq  "!sh") {
+			$irc->write("PRIVMSG $replyto :### '$command' Doesn't output anything");
+		}
 	} elsif($numlines <= 3) {	#Max 3 lines: reply to the channel if sent to the channel, reply to sender if it's a private message
 		foreach(@lines) { $irc->write("PRIVMSG $replyto :$_"); }
 	} elsif($numlines <= 20) {	#3-20 lines:
 		if($replyto=~/^#/) {	#send first 2 lines to the channel if it was sent to the channel
-			$irc->write("PRIVMSG $replyto :### The result was too large ($numlines lines). I'm sending it to $from. These are the first 2 lines:");
+			if($questiontype eq  "!sh") {
+				$irc->write("PRIVMSG $replyto :### The result was too large ($numlines lines). I'm sending it to $from. These are the first 2 lines:");
+			}
 			$irc->write("PRIVMSG $replyto :" . $lines[0]);
 			$irc->write("PRIVMSG $replyto :" . $lines[1]);
+			if($questiontype eq "!w") {
+				$irc->write("PRIVMSG $replyto :(more info has been sent to $from)");
+			}
 		}
 		#always send all lines to the sender
 		foreach(@lines) { $irc->write("PRIVMSG $from :$_"); }
 	} else {	# > 20 lines
 		if($replyto=~/^#/) {	#send first 2 lines to the channel if it was sent to the channel
-			$irc->write("PRIVMSG $replyto :### The result was WAY too large ($numlines lines). These are the first 2 and I'll send 20 lines to $from:");
+			if($questiontype eq  "!sh") {
+				$irc->write("PRIVMSG $replyto :### The result was WAY too large ($numlines lines). These are the first 2 and I'll send 20 lines to $from:");
+			}
 			$irc->write("PRIVMSG $replyto :" . $lines[0]);
 			$irc->write("PRIVMSG $replyto :" . $lines[1]);
+			if($questiontype eq "!w") {
+				$irc->write("PRIVMSG $replyto :(more info has been sent to $from)");
+			}
 		}
 		#send 20 first lines to sender
-		$irc->write("PRIVMSG $from :### The result was WAY too large ($numlines lines). These are the first 20 lines:");
+		if($questiontype eq  "!sh") {
+			$irc->write("PRIVMSG $from :### The result was WAY too large ($numlines lines). These are the first 20 lines:");
+		}
 		foreach(my $i=0; $i<20; $i++) { $irc->write("PRIVMSG $from :$lines[$i]"); }
+		if($questiontype eq "!w") {
+			$irc->write("PRIVMSG $replyto :(more info is available but i will be banned for spamming if i would send it)");
+		}
 	}
 }
 
@@ -122,7 +139,7 @@ sub runsh {
 	}
 	$stdout.=$stderr;
 	chomp $stdout; my @outputlines = split(/\n/, $stdout);
-	sendreplies($irc, $from, $to, \@outputlines, $command);
+	sendreplies($irc, $from, $to, \@outputlines, $command, "!sh");
 	verbose(2, "Result of '!sh $command':\n$stdout");
 }
 
@@ -299,15 +316,12 @@ EINDE
 	} elsif($message =~ /^w\s*(.*?)\s*$/) {
 		my $subject = $1;
 		my $info = fetchandparseddg($mech, $subject);
+		my @outputlines = ();;
 		foreach my $line (split(/\.\s+/, $info)) {
 			$line.='.'; $line=~s/\.\.$/./;
-			if($to=~/^#/) { # $from sent to channel
-				$irc->write("PRIVMSG $to :$line")
-			} else { # $from sent to me
-				$irc->write("PRIVMSG $from :$line")
-			}
-			verbose(2, "!w '$subject' -> '$line'");
+			push(@outputlines, $line);
 		}
+		sendreplies($irc, $from, $to, \@outputlines, $subject, "!w");
 	} elsif($message =~ /^poccy\s*(\S+)$/i) {
 		my $demon = $1;
 		$irc->write("NICK garodemonkiller", sub { verbose(2, "Changed nick to 'garodemonkiller'"); } );
