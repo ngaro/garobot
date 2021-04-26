@@ -100,7 +100,7 @@ sub sendreplies {
 			$irc->write("PRIVMSG $replyto :" . $lines[0]);
 			$irc->write("PRIVMSG $replyto :" . $lines[1]);
 			if($questiontype eq "!w") {
-				$irc->write("PRIVMSG $replyto :(more info has been sent to $from)");
+				$irc->write("PRIVMSG $replyto :... More info has been sent to $from ...");
 			}
 		}
 		#always send all lines to the sender
@@ -113,7 +113,7 @@ sub sendreplies {
 			$irc->write("PRIVMSG $replyto :" . $lines[0]);
 			$irc->write("PRIVMSG $replyto :" . $lines[1]);
 			if($questiontype eq "!w") {
-				$irc->write("PRIVMSG $replyto :(more info has been sent to $from)");
+				$irc->write("PRIVMSG $replyto :... More info has been sent to $from ...");
 			}
 		}
 		#send 20 first lines to sender
@@ -122,7 +122,7 @@ sub sendreplies {
 		}
 		foreach(my $i=0; $i<20; $i++) { $irc->write("PRIVMSG $from :$lines[$i]"); }
 		if($questiontype eq "!w") {
-			$irc->write("PRIVMSG $replyto :(more info is available but i will be banned for spamming if i would send it)");
+			$irc->write("PRIVMSG $replyto :... More info is available but i will be banned for spamming if i would send it ...");
 		}
 	}
 }
