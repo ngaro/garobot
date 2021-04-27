@@ -23,7 +23,7 @@ use Mojo::IRC;
 use Data::Dumper;
 use Capture::Tiny ':all';
 use Term::ReadPassword;
-use WWW::Mechanize; use WWW::Mechanize::TreeBuilder;
+use WWW::DuckDuckGo;
 
 #default settings
 my $rodir= "/usr/local/readonlydata";
@@ -203,7 +203,7 @@ if($< eq 0) {
 }
 readsettings;
 $currentnick = $settings->{nick};
-my $mech = WWW::Mechanize->new(autocheck=>0); WWW::Mechanize::TreeBuilder->meta->apply($mech);
+my $duck = WWW::DuckDuckGo->new;
 if($settings->{server}=~/ /) { print STDERR "ERROR: Too much servers given, use a different bot for each server\n";  exit 1; }
 verbose(3, Dumper($settings));
 my $irc = Mojo::IRC->new(nick => $settings->{nick}, user => $settings->{user}, name => $settings->{name},  server => $settings->{server}) or die "Can't create IRC object";
@@ -227,61 +227,6 @@ $irc->on( error => sub {
 	my ($irc, $error) = @_;
 	print STDERR "ERROR: (Streamerror) '$error'\n";
 } );
-
-sub fetch {
-	my ($mech, $url) = @_;
-	print STDERR "Fetching '$url'\n";
-	$mech->get($url);
-	if($mech->success and $mech->is_html) {
-		return 1;
-	} else {
-		print STDERR "Couldn't fetch '$url'\n";
-		return undef;
-	}
-}
-
-sub searchbettersubject {
-	my ($mech, $subject) = @_;
-	print STDERR "Searching a better subject for '$subject'\n";
-	my $url = 'https://duckduckgo.com/html?q='.$subject;
-	return undef if(not defined fetch($mech, $url));
-	my @wikilinks = $mech->look_down('_tag'=>'a', sub { defined $_[0]->{"_content"}->[0] and $_[0]->{"_content"}->[0]=~/^\s*en.wikipedia.org\/wiki\//;});
-	if(@wikilinks > 0) {
-		my $subject = $wikilinks[0]->{"_content"}->[0];
-		$subject=~s/^.*\/(.*?)\s*$/$1/;
-		print STDERR "New subject '$subject' found\n";
-		return $subject;
-	}
-	return undef;
-}
-
-sub parseforabstract {
-	my ($mech, $subject) = @_;
-	print STDERR "Searching info about '$subject' (+-signs instead of spaces here is normal)\n";
-	my $url = 'https://duckduckgo.com/?q='.$subject.'&t=lm&atb=v130-1&ia=web';
-	return undef if(not defined fetch($mech, $url));
-	my @scripts = $mech->look_down('_tag' => 'script', sub { defined $_[0]->{"_content"}->[0] and $_[0]->{"_content"}->[0]=~/^DDG\.ready/; } );
-	if(@scripts > 0) {
-		my $abstract = $scripts[0]->{"_content"}->[0];
-		$abstract=~s/^.*?"Abstract":"(.*?)","AbstractSource":".*/$1/;
-		print STDERR "Abstract '$abstract' found\n";
-		return $abstract;
-	}
-	return undef;
-}
-
-sub fetchandparseddg{
-	my ($mech, $subject) = @_;
-	$subject=~s/\s+/+/g;
-	my $output = parseforabstract($mech, $subject);
-	if(defined $output) { return $output; } #subject has wikipedia info
-	$subject = searchbettersubject($mech, $subject);
-	if(defined $subject) { #subject has a link to a subject that wikipedia knows
-		$output = parseforabstract($mech, $subject);
-		if(defined $output) { return $output; } #that new subject has wikipedia info
-	}
-	return "Sorry, I don't know anything about this.";
-}
 
 $irc->on( irc_privmsg => sub {
 	my ($irc, $msghash) = @_;
@@ -315,13 +260,43 @@ EINDE
 		verbose(3,$help);
 	} elsif($message =~ /^w\s*(.*?)\s*$/) {
 		my $subject = $1;
-		my $info = fetchandparseddg($mech, $subject);
-		my @outputlines = ();;
-		foreach my $line (split(/\.\s+/, $info)) {
-			$line.='.'; $line=~s/\.\.$/./;
-			push(@outputlines, $line);
+		my $replyto = $from; $replyto = $to if($to=~/^#/);
+		my $info = $duck->zeroclickinfo($subject);
+		verbose(3,Dumper($info));
+		if(defined $info->{_json}) {
+			$info = $info->{_json};
+			if($info->{AbstractText} ne "") {
+				$info = $info->{AbstractText};
+				my @outputlines = ();
+				foreach my $line (split(/\.\s+/, $info)) {
+					$line.='.'; $line=~s/\.\.$/./;
+					push(@outputlines, $line);
+				}
+				sendreplies($irc, $from, $to, \@outputlines, $subject, "!w");
+			} elsif(@{$info->{RelatedTopics}} > 0) {
+				$info = $info->{RelatedTopics};
+				my @outputlines = ();
+				foreach my $category (@$info) {
+					if(defined $category->{Name} and $category->{Name} ne "See also") {
+						foreach my $topic (@{$category->{Topics}}) {
+							if(defined $topic->{Result}) {
+								my $witharrow = $topic->{Result};
+								$witharrow=~s/^<a.*?>(.*?)<\/a>(.*)$/$1 -> $2/;
+								push(@outputlines, $witharrow);
+							} elsif(defined $topic->{Text}) {
+								push(@outputlines, $topic->{Text});
+							}
+						}
+
+					}
+				}
+				sendreplies($irc, $from, $to, \@outputlines, $subject, "!w");
+			} else {
+				$irc->write("PRIVMSG $replyto :I don't know anything (about '$subject')");
+			}
+		} else {
+			$irc->write("PRIVMSG $replyto :Couldn't search info (about '$subject')");
 		}
-		sendreplies($irc, $from, $to, \@outputlines, $subject, "!w");
 	} elsif($message =~ /^poccy\s*(\S+)$/i) {
 		my $demon = $1;
 		$irc->write("NICK garodemonkiller", sub { verbose(2, "Changed nick to 'garodemonkiller'"); } );
