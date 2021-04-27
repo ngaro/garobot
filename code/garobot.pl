@@ -24,6 +24,7 @@ use Data::Dumper;
 use Capture::Tiny ':all';
 use Term::ReadPassword;
 use WWW::DuckDuckGo;
+use WWW::Mechanize; use WWW::Mechanize::TreeBuilder;
 
 #default settings
 my $rodir= "/usr/local/readonlydata";
@@ -196,6 +197,79 @@ sub notallowedprivmsg {
 	$irc->write("PRIVMSG $from :Sorry $from, either '$message' isn't a command or you are not allowed to use it. Try '!help'");
 }
 
+sub fetch {
+	my ($mech, $url) = @_;
+	verbose(3, "Fetching '$url'");
+	$mech->get($url);
+	if($mech->success and $mech->is_html) {
+		return 1;
+	} else {
+		print STDERR "Couldn't fetch '$url'\n";
+		return undef;
+	}
+}
+
+#return "" if we can't find a better subject
+sub searchbettersubject {
+	my ($mech, $subject) = @_;
+	my $url = 'https://duckduckgo.com/html?q='.$subject;
+	return "" if(not defined fetch($mech, $url));
+	my @wikilinks = $mech->look_down('_tag'=>'a', sub { defined $_[0]->{"_content"}->[0] and $_[0]->{"_content"}->[0]=~/^\s*en.wikipedia.org\/wiki\//;});
+	if(@wikilinks > 0) {
+		my $subject = $wikilinks[0]->{"_content"}->[0];
+		$subject=~s/^.*\/(.*?)\s*$/$1/;
+		verbose(3, "Better subject '$subject'");
+		return $subject;
+	}
+	return "";
+}
+
+#send subjectinfo to irc and return undef, return a better subject if the subject is 'strange' or "" if nothing is found
+sub showsubjectinfo {
+	my ($mech, $duck, $irc, $subject, $from, $to) = @_;
+	my $replyto = $from; $replyto = $to if($to=~/^#/);
+	my $info = $duck->zeroclickinfo($subject);
+	verbose(3,Dumper($info));
+	if(defined $info->{_json}) {
+		$info = $info->{_json};
+		if($info->{AbstractText} ne "") {
+			$info = $info->{AbstractText};
+			my @outputlines = ();
+			foreach my $line (split(/\.\s+/, $info)) {
+				$line.='.'; $line=~s/\.\.$/./;
+				push(@outputlines, $line);
+			}
+			sendreplies($irc, $from, $to, \@outputlines, $subject, "!w");
+			return undef;
+		} elsif(@{$info->{RelatedTopics}} > 0) {
+			$info = $info->{RelatedTopics};
+			my @outputlines = ();
+			foreach my $category (@$info) {
+				if(defined $category->{Name} and $category->{Name} ne "See also") {
+					foreach my $topic (@{$category->{Topics}}) {
+						if(defined $topic->{Result}) {
+							my $witharrow = $topic->{Result};
+							$witharrow=~s/^<a.*?>(.*?)<\/a>(.*)$/$1 -> $2/;
+							push(@outputlines, $witharrow);
+						} elsif(defined $topic->{Text}) {
+							push(@outputlines, $topic->{Text});
+						}
+					}
+				}
+			}
+			if(@outputlines == 0) {
+				return searchbettersubject($mech, $subject);
+			}
+			sendreplies($irc, $from, $to, \@outputlines, $subject, "!w");
+			return undef;
+		} else {
+			$irc->write("PRIVMSG $replyto :I don't know anything (about '$subject')");
+		}
+	} else {
+		$irc->write("PRIVMSG $replyto :Couldn't search info (about '$subject')");
+	}
+}
+
 #Create the bot
 if($< eq 0) {
 	system("chown -R user:user /home/user");	#When a tmpfs is mounted over /home, /home/user becomes root:root
@@ -203,6 +277,7 @@ if($< eq 0) {
 }
 readsettings;
 $currentnick = $settings->{nick};
+my $mech = WWW::Mechanize->new(autocheck=>0); WWW::Mechanize::TreeBuilder->meta->apply($mech);
 my $duck = WWW::DuckDuckGo->new;
 if($settings->{server}=~/ /) { print STDERR "ERROR: Too much servers given, use a different bot for each server\n";  exit 1; }
 verbose(3, Dumper($settings));
@@ -259,44 +334,8 @@ EINDE
 		foreach(split /\n/, $help) { $irc->write("PRIVMSG $from :$_"); }
 		verbose(3,$help);
 	} elsif($message =~ /^w\s*(.*?)\s*$/) {
-		my $subject = $1;
-		my $replyto = $from; $replyto = $to if($to=~/^#/);
-		my $info = $duck->zeroclickinfo($subject);
-		verbose(3,Dumper($info));
-		if(defined $info->{_json}) {
-			$info = $info->{_json};
-			if($info->{AbstractText} ne "") {
-				$info = $info->{AbstractText};
-				my @outputlines = ();
-				foreach my $line (split(/\.\s+/, $info)) {
-					$line.='.'; $line=~s/\.\.$/./;
-					push(@outputlines, $line);
-				}
-				sendreplies($irc, $from, $to, \@outputlines, $subject, "!w");
-			} elsif(@{$info->{RelatedTopics}} > 0) {
-				$info = $info->{RelatedTopics};
-				my @outputlines = ();
-				foreach my $category (@$info) {
-					if(defined $category->{Name} and $category->{Name} ne "See also") {
-						foreach my $topic (@{$category->{Topics}}) {
-							if(defined $topic->{Result}) {
-								my $witharrow = $topic->{Result};
-								$witharrow=~s/^<a.*?>(.*?)<\/a>(.*)$/$1 -> $2/;
-								push(@outputlines, $witharrow);
-							} elsif(defined $topic->{Text}) {
-								push(@outputlines, $topic->{Text});
-							}
-						}
-
-					}
-				}
-				sendreplies($irc, $from, $to, \@outputlines, $subject, "!w");
-			} else {
-				$irc->write("PRIVMSG $replyto :I don't know anything (about '$subject')");
-			}
-		} else {
-			$irc->write("PRIVMSG $replyto :Couldn't search info (about '$subject')");
-		}
+		my $bettersubject = showsubjectinfo($mech, $duck, $irc, $1, $from, $to);
+		showsubjectinfo($mech, $duck, $irc, $bettersubject, $from, $to) if(defined $bettersubject and $bettersubject ne "");
 	} elsif($message =~ /^poccy\s*(\S+)$/i) {
 		my $demon = $1;
 		$irc->write("NICK garodemonkiller", sub { verbose(2, "Changed nick to 'garodemonkiller'"); } );
