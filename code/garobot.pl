@@ -350,11 +350,11 @@ EINDE
 	} elsif($message =~ /^w\s*(.*?)\s*$/) {
 		my $subject = $1;
 		my $outputlines = subjectinfo($mech, $subject);
-		if(defined $outputlines) {
+		if(defined $outputlines and $outputlines ne '') {
 			sendreplies($irc, $from, $to, $outputlines, $subject, "!w");
 		} else {
 			my $replyto = $from; $replyto = $to if($to=~/^#/);
-			$irc->write("PRIVMSG $replyto :Sorry I can't help you with that ($subject)");
+			$irc->write("PRIVMSG $replyto :Sorry I can't help you (with '$subject')");
 		}
 	} elsif($message =~ /^poccy\s*(\S+)$/i) {
 		my $demon = $1;
