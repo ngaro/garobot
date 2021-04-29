@@ -23,8 +23,8 @@ use Mojo::IRC;
 use Data::Dumper;
 use Capture::Tiny ':all';
 use Term::ReadPassword;
-use WWW::DuckDuckGo;
 use WWW::Mechanize; use WWW::Mechanize::TreeBuilder;
+use JSON;
 
 #default settings
 my $rodir= "/usr/local/readonlydata";
@@ -123,7 +123,7 @@ sub sendreplies {
 		}
 		foreach(my $i=0; $i<20; $i++) { $irc->write("PRIVMSG $from :$lines[$i]"); }
 		if($questiontype eq "!w") {
-			$irc->write("PRIVMSG $replyto :... More info is available but i will be banned for spamming if i would send it ...");
+			$irc->write("PRIVMSG $from :... More info is available but i will be banned for spamming if i would send it ...");
 		}
 	}
 }
@@ -200,73 +200,86 @@ sub notallowedprivmsg {
 sub fetch {
 	my ($mech, $url) = @_;
 	verbose(3, "Fetching '$url'");
-	$mech->get($url);
-	if($mech->success and $mech->is_html) {
-		return 1;
-	} else {
-		print STDERR "Couldn't fetch '$url'\n";
-		return undef;
-	}
+	return $mech->get($url);
 }
 
-#return "" if we can't find a better subject
-sub searchbettersubject {
-	my ($mech, $subject) = @_;
-	my $url = 'https://duckduckgo.com/html?q='.$subject;
-	return "" if(not defined fetch($mech, $url));
-	my @wikilinks = $mech->look_down('_tag'=>'a', sub { defined $_[0]->{"_content"}->[0] and $_[0]->{"_content"}->[0]=~/^\s*en.wikipedia.org\/wiki\//;});
-	if(@wikilinks > 0) {
-		my $subject = $wikilinks[0]->{"_content"}->[0];
-		$subject=~s/^.*\/(.*?)\s*$/$1/;
-		verbose(3, "Better subject '$subject'");
-		return $subject;
+#split ddg info into lines
+sub subjectinfolines {
+	my $info = shift;
+	my @outputlines = ();
+	foreach my $line (split(/\.\s+/, $info)) {
+		$line.='.'; $line=~s/\.\.$/./;
+		push(@outputlines, $line);
 	}
-	return "";
+	return \@outputlines;
 }
 
 #send subjectinfo to irc and return undef, return a better subject if the subject is 'strange' or "" if nothing is found
-sub showsubjectinfo {
-	my ($mech, $duck, $irc, $subject, $from, $to) = @_;
-	my $replyto = $from; $replyto = $to if($to=~/^#/);
-	my $info = $duck->zeroclickinfo($subject);
-	verbose(3,Dumper($info));
-	if(defined $info->{_json}) {
-		$info = $info->{_json};
-		if($info->{AbstractText} ne "") {
-			$info = $info->{AbstractText};
-			my @outputlines = ();
-			foreach my $line (split(/\.\s+/, $info)) {
-				$line.='.'; $line=~s/\.\.$/./;
-				push(@outputlines, $line);
+sub subjectinfo {
+	my ($mech, $topic) = @_;
+	$topic=~s/\s+/+/g;
+	my $info = fetch($mech, "https://duckduckgo.com/?q=$topic&t=lm&atb=v130-1&ia=web");
+	$info = HTML::TreeBuilder->new_from_content($info->decoded_content)->elementify();
+	my @scripturls = ();
+	my @scripts = $info->look_down( _tag => "script", sub { defined $_[0]->attr('_content') and @{$_[0]->attr('_content')} > 0 } );
+	foreach(@scripts) {
+		if($_->{_content}->[0] =~ /^DDG\.ready\(function \(\) \{DDG\.duckbar\.add\((.*)\);\}\);$/) {
+			my $json=$1;
+			verbose(3,"SI1|||".Dumper($json));
+			$json = decode_json($json);
+			unless($json->{data}->{AbstractText} eq '') {
+				return subjectinfolines($json->{data}->{AbstractText});
 			}
-			sendreplies($irc, $from, $to, \@outputlines, $subject, "!w");
-			return undef;
-		} elsif(@{$info->{RelatedTopics}} > 0) {
-			$info = $info->{RelatedTopics};
-			my @outputlines = ();
-			foreach my $category (@$info) {
-				if(defined $category->{Name} and $category->{Name} ne "See also") {
-					foreach my $topic (@{$category->{Topics}}) {
-						if(defined $topic->{Result}) {
-							my $witharrow = $topic->{Result};
-							$witharrow=~s/^<a.*?>(.*?)<\/a>(.*)$/$1 -> $2/;
-							push(@outputlines, $witharrow);
-						} elsif(defined $topic->{Text}) {
-							push(@outputlines, $topic->{Text});
+			verbose(3,"SI2|||".Dumper($json->{data}));
+			verbose(3,"SI2.1|||".Dumper($json->{data}->{RelatedTopics}));
+			if(@{$json->{data}->{RelatedTopics}} > 0) {
+				my @outputlines = ();
+				foreach my $category (@{$json->{data}->{RelatedTopics}}) {
+					verbose(3,"SI2.2|||".Dumper($category));
+					if(defined $category->{Name} and $category->{Name} ne "See also") {
+						foreach my $possibletopic (@{$category->{Topics}}) {
+							if(defined $possibletopic->{Result}) {
+								my $witharrow = $possibletopic->{Result};
+								$witharrow=~s/^<a.*?>(.*?)<\/a>(.*)$/$1 -> $2/;
+								verbose(3,"SI2.3|||$witharrow");
+								push(@outputlines, $witharrow);
+							} elsif(defined $topic->{Text}) {
+								verbose(3,"SI2.4|||".$possibletopic->{Text});
+								push(@outputlines, $possibletopic->{Text});
+							}
 						}
 					}
 				}
+				return \@outputlines;
 			}
-			if(@outputlines == 0) {
-				return searchbettersubject($mech, $subject);
-			}
-			sendreplies($irc, $from, $to, \@outputlines, $subject, "!w");
-			return undef;
-		} else {
-			$irc->write("PRIVMSG $replyto :I don't know anything (about '$subject')");
 		}
-	} else {
-		$irc->write("PRIVMSG $replyto :Couldn't search info (about '$subject')");
+		if($_->{_content}->[0] =~ /\S+\.js/) {
+			verbose(3,"SI3|||". $_->{_content}->[0]);
+			my @jslines =  split( /;/, $_->{_content}->[0] );
+			foreach(@jslines) {
+				if(/^.*?\/(\S+\.js.*)'\).*/) {
+					push(@scripturls, "https://duckduckgo.com/$1&biaexp=b&msvrtexp=b");
+				}
+			}
+		}
+	}
+	foreach(@scripturls) {
+		$info = fetch($mech, $_);
+		$info = HTML::TreeBuilder->new_from_content($info->decoded_content)->elementify()->look_down( _tag => "body")->{_content}->[0];
+		verbose(3, "SI4|||" . Dumper($info));
+		if($info =~ /DDG\.duckbar\.add\(\{"data":\{.*?"AbstractText":"(.*?)","AbstractURL":".*$/) {
+			return subjectinfolines($1);
+		}
+		if($info =~ /^.*nrj\(\'\/(a\.js.*?)'\);.*/) {
+			$info = fetch($mech, "https://duckduckgo.com/$1");
+			$info = HTML::TreeBuilder->new_from_content($info->decoded_content);
+			last;
+		}
+	}
+	if(ref($info) ne "") {
+		$info = $info->look_down(_tag=>'p')->as_text();
+		$info =~ s/^\s*(.*?)\s*$/$1/;
+		return subjectinfolines($info);
 	}
 }
 
@@ -277,8 +290,9 @@ if($< eq 0) {
 }
 readsettings;
 $currentnick = $settings->{nick};
-my $mech = WWW::Mechanize->new(autocheck=>0); WWW::Mechanize::TreeBuilder->meta->apply($mech);
-my $duck = WWW::DuckDuckGo->new;
+my $mech = WWW::Mechanize->new(ssl_opts => { verify_hostname => 1 }, timeout => 10, autocheck => 1, cookie_jar => {}, onerror => sub { my $error=join('',@_); say STDERR $error; } );
+$mech->agent_alias('Linux Mozilla');
+WWW::Mechanize::TreeBuilder->meta->apply($mech);
 if($settings->{server}=~/ /) { print STDERR "ERROR: Too much servers given, use a different bot for each server\n";  exit 1; }
 verbose(3, Dumper($settings));
 my $irc = Mojo::IRC->new(nick => $settings->{nick}, user => $settings->{user}, name => $settings->{name},  server => $settings->{server}) or die "Can't create IRC object";
@@ -334,8 +348,14 @@ EINDE
 		foreach(split /\n/, $help) { $irc->write("PRIVMSG $from :$_"); }
 		verbose(3,$help);
 	} elsif($message =~ /^w\s*(.*?)\s*$/) {
-		my $bettersubject = showsubjectinfo($mech, $duck, $irc, $1, $from, $to);
-		showsubjectinfo($mech, $duck, $irc, $bettersubject, $from, $to) if(defined $bettersubject and $bettersubject ne "");
+		my $subject = $1;
+		my $outputlines = subjectinfo($mech, $subject);
+		if(defined $outputlines) {
+			sendreplies($irc, $from, $to, $outputlines, $subject, "!w");
+		} else {
+			my $replyto = $from; $replyto = $to if($to=~/^#/);
+			$irc->write("PRIVMSG $replyto :Sorry I can't help you with that ($subject)");
+		}
 	} elsif($message =~ /^poccy\s*(\S+)$/i) {
 		my $demon = $1;
 		$irc->write("NICK garodemonkiller", sub { verbose(2, "Changed nick to 'garodemonkiller'"); } );
