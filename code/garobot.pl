@@ -214,9 +214,46 @@ sub subjectinfolines {
 	return \@outputlines;
 }
 
-#send subjectinfo to irc and return undef, return a better subject if the subject is 'strange' or "" if nothing is found
-sub subjectinfo {
+
+#return a list of possible subjects or undef if nothing is found
+sub subjectlist {
 	my ($mech, $topic) = @_;
+	$topic=~s/\s+/+/g;
+	my $info = fetch($mech, "https://duckduckgo.com/?q=$topic&t=lm&atb=v130-1&ia=web");
+	$info = HTML::TreeBuilder->new_from_content($info->decoded_content)->elementify();
+	my @scripts = $info->look_down( _tag => "script", sub { defined $_[0]->attr('_content') and @{$_[0]->attr('_content')} > 0 } );
+	my $list={};
+	foreach my $script (@scripts) {
+		if($script->{_content}->[0] =~ /^DDG\.ready\(function \(\) \{DDG\.duckbar\.add\((.*)\);\}\);$/) {
+			my $json = decode_json($1);
+			if(defined $json->{data} and defined $json->{data}->{RelatedTopics}) {
+				$json = $json->{data}->{RelatedTopics};
+				foreach my $related (@$json) {
+					if(defined $related->{Result} and $related->{Result} =~/^<a.*?>(.+?)<\/a>(.+)$/) {
+						$list->{$1} = $2;
+					} elsif($related->{'Topics'}) {
+						foreach(@{$related->{'Topics'}}) {
+							$_->{Result} =~ /^<a.*?>(.+?)<\/a>(.+)$/;
+							$list->{$1} = $2;
+						}
+					}
+				}
+			}
+		}
+	}
+	my @outputlines=();
+	foreach(sort keys %$list) {
+		$list->{$_}=~s/^\s*[,-]?\s*//;
+		$list->{$_} = ucfirst $list->{$_};
+		push(@outputlines, "$_ -> $list->{$_}");
+	}
+	return \@outputlines if(@outputlines>0);
+	return undef;
+}
+
+#return info about a subject or '' or undef in nothing is found. If $what = 'bettersubject' then just return a better name
+sub subjectinfo {
+	my ($mech, $topic, $what) = @_;
 	$topic=~s/\s+/+/g;
 	my $info = fetch($mech, "https://duckduckgo.com/?q=$topic&t=lm&atb=v130-1&ia=web");
 	$info = HTML::TreeBuilder->new_from_content($info->decoded_content)->elementify();
@@ -229,28 +266,6 @@ sub subjectinfo {
 			$json = decode_json($json);
 			unless($json->{data}->{AbstractText} eq '') {
 				return subjectinfolines($json->{data}->{AbstractText});
-			}
-			verbose(3,"SI2|||".Dumper($json->{data}));
-			verbose(3,"SI2.1|||".Dumper($json->{data}->{RelatedTopics}));
-			if(@{$json->{data}->{RelatedTopics}} > 0) {
-				my @outputlines = ();
-				foreach my $category (@{$json->{data}->{RelatedTopics}}) {
-					verbose(3,"SI2.2|||".Dumper($category));
-					if(defined $category->{Name} and $category->{Name} ne "See also") {
-						foreach my $possibletopic (@{$category->{Topics}}) {
-							if(defined $possibletopic->{Result}) {
-								my $witharrow = $possibletopic->{Result};
-								$witharrow=~s/^<a.*?>(.*?)<\/a>(.*)$/$1 -> $2/;
-								verbose(3,"SI2.3|||$witharrow");
-								push(@outputlines, $witharrow);
-							} elsif(defined $topic->{Text}) {
-								verbose(3,"SI2.4|||".$possibletopic->{Text});
-								push(@outputlines, $possibletopic->{Text});
-							}
-						}
-					}
-				}
-				return \@outputlines;
 			}
 		}
 		if($_->{_content}->[0] =~ /\S+\.js/) {
@@ -267,6 +282,9 @@ sub subjectinfo {
 		$info = fetch($mech, $_);
 		$info = HTML::TreeBuilder->new_from_content($info->decoded_content)->elementify()->look_down( _tag => "body")->{_content}->[0];
 		verbose(3, "SI4|||" . Dumper($info));
+		if(defined $what and $what eq 'bettersubject' and $info =~ /DDG\.duckbar\.add\(\{"data":\{.*?"Heading":"(.*?)",".*$/) {
+			return $1;
+		}
 		if($info =~ /DDG\.duckbar\.add\(\{"data":\{.*?"AbstractText":"(.*?)","AbstractURL":".*$/) {
 			return subjectinfolines($1);
 		}
@@ -342,7 +360,8 @@ Some commands are not allowed in channels
 !disallow nick  -> nick is no longer botadmin
 !sh command     -> run command in a shell
 !poccy nick     -> use magic to get rid of demon 'nick'
-!w thing        -> get some info about thing from wikipedia
+!w thing        -> get some info about thing
+!l thing        -> get a list of things similar to thing
 !restart        -> clears all settings and restarts the bot (filesystem status is preserved)
 EINDE
 		foreach(split /\n/, $help) { $irc->write("PRIVMSG $from :$_"); }
@@ -355,6 +374,20 @@ EINDE
 		} else {
 			my $replyto = $from; $replyto = $to if($to=~/^#/);
 			$irc->write("PRIVMSG $replyto :Sorry I can't help you (with '$subject')");
+		}
+	} elsif($message =~ /^l\s+(.*?)\s*$/) {
+		my $subject = $1;
+		my $outputlines = subjectlist($mech, $subject);
+		if(defined $outputlines and @{$outputlines} > 0 ) {
+			sendreplies($irc, $from, $to, $outputlines, $subject, "!w");
+		} else {
+			$outputlines = subjectlist($mech, subjectinfo($mech, $subject,"bettersubject"));
+			if(defined $outputlines and @{$outputlines} > 0 ) {
+				sendreplies($irc, $from, $to, $outputlines, $subject, "!w");
+			} else {
+				my $replyto = $from; $replyto = $to if($to=~/^#/);
+				$irc->write("PRIVMSG $replyto :Sorry I can't help you (with '$subject')");
+			}
 		}
 	} elsif($message =~ /^poccy\s*(\S+)$/i) {
 		my $demon = $1;
